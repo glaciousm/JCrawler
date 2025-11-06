@@ -94,7 +94,12 @@ public class JavaScriptPageProcessor {
                                             htmlRef.set(html);
                                             titleRef.set(webEngine.getTitle());
 
-                                            log.debug("WebView rendered page, HTML length: {}", html != null ? html.length() : 0);
+                                            log.info("WebView rendered page, HTML length: {}", html != null ? html.length() : 0);
+                                            if (html != null && html.length() < 5000) {
+                                                log.info("Full HTML content:\n{}", html);
+                                            } else if (html != null) {
+                                                log.info("HTML preview (first 1000 chars):\n{}", html.substring(0, Math.min(1000, html.length())));
+                                            }
                                         } catch (Exception e) {
                                             errorRef.set(e);
                                         } finally {
@@ -144,7 +149,18 @@ public class JavaScriptPageProcessor {
                     result.success = true;
                     result.statusCode = 200;
 
-                    log.debug("Fetched {} with WebView: {} links found", url, result.document.select("a[href]").size());
+                    int linkCount = result.document.select("a[href]").size();
+                    log.info("Fetched {} with WebView: {} anchor tags with href found", url, linkCount);
+
+                    // Log first few links for debugging
+                    if (linkCount > 0) {
+                        var links = result.document.select("a[href]");
+                        log.info("Sample links found:");
+                        for (int i = 0; i < Math.min(5, linkCount); i++) {
+                            var link = links.get(i);
+                            log.info("  - href: {} (abs: {})", link.attr("href"), link.attr("abs:href"));
+                        }
+                    }
                 } else {
                     result.success = false;
                     result.errorMessage = "Empty HTML response";
