@@ -136,12 +136,7 @@
             <version>8.0.1.Final</version>
         </dependency>
 
-        <!-- Playwright for JavaScript Rendering -->
-        <dependency>
-            <groupId>com.microsoft.playwright</groupId>
-            <artifactId>playwright</artifactId>
-            <version>1.40.0</version>
-        </dependency>
+        <!-- JavaFX WebView (bundled) is used for JavaScript rendering - no additional dependency needed -->
 
         <!-- Logging -->
         <dependency>

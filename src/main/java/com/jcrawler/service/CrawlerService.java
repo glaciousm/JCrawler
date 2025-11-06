@@ -80,12 +80,13 @@ public class CrawlerService {
         }
 
         session = sessionDao.save(session);
+        final Long sessionId = session.getId();
 
         // Save extraction rules
         if (request.getExtractionRules() != null) {
             for (CrawlRequest.ExtractionRuleDto ruleDto : request.getExtractionRules()) {
                 ExtractionRule rule = ExtractionRule.builder()
-                        .sessionId(session.getId())
+                        .sessionId(sessionId)
                         .ruleName(ruleDto.getRuleName())
                         .selectorType(ExtractionRule.SelectorType.valueOf(ruleDto.getSelectorType().toUpperCase()))
                         .selectorValue(ruleDto.getSelectorValue())
@@ -96,11 +97,8 @@ public class CrawlerService {
             }
         }
 
-        // Update session status
-        session.setStatus(CrawlSession.CrawlStatus.RUNNING);
-        sessionDao.save(session);
-
-        final Long sessionId = session.getId();
+        // Update session status to RUNNING using direct UPDATE
+        sessionDao.updateStatus(sessionId, CrawlSession.CrawlStatus.RUNNING);
 
         // Start crawl asynchronously
         crawlerEngine.startCrawl(session, new CrawlerEngine.CrawlCallback() {
@@ -128,11 +126,7 @@ public class CrawlerService {
                 flow = flowDao.save(flow);
 
                 // Update session total flows
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
-                if (s != null) {
-                    s.setTotalFlows(s.getTotalFlows() + 1);
-                    sessionDao.save(s);
-                }
+                sessionDao.incrementTotalFlows(sessionId);
             }
 
             @Override
@@ -158,11 +152,7 @@ public class CrawlerService {
                     downloadedFileDao.save(downloadedFile);
 
                     // Update session total downloaded
-                    CrawlSession s = sessionDao.findById(sessionId).orElse(null);
-                    if (s != null) {
-                        s.setTotalDownloaded(s.getTotalDownloaded() + 1);
-                        sessionDao.save(s);
-                    }
+                    sessionDao.incrementTotalDownloaded(sessionId);
                 } catch (Exception e) {
                     log.error("Error saving file reference: {}", e.getMessage());
                 }
@@ -181,11 +171,7 @@ public class CrawlerService {
                     externalUrlDao.save(externalUrl);
 
                     // Update session total external URLs
-                    CrawlSession s = sessionDao.findById(sessionId).orElse(null);
-                    if (s != null) {
-                        s.setTotalExternalUrls(s.getTotalExternalUrls() + 1);
-                        sessionDao.save(s);
-                    }
+                    sessionDao.incrementTotalExternalUrls(sessionId);
                 } catch (Exception e) {
                     log.error("Error saving external URL: {}", e.getMessage());
                 }
@@ -208,26 +194,23 @@ public class CrawlerService {
 
             @Override
             public void onComplete() {
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
-                if (s != null) {
-                    s.setStatus(CrawlSession.CrawlStatus.COMPLETED);
-                    s.setEndTime(LocalDateTime.now());
-                    s.setTotalPages(pageDao.countBySessionId(sessionId).intValue());
-                    s.setTotalDownloaded(downloadedFileDao.countBySessionId(sessionId).intValue());
-                    sessionDao.save(s);
-
+                try {
+                    Integer totalPages = pageDao.countBySessionId(sessionId).intValue();
+                    Integer totalDownloaded = downloadedFileDao.countBySessionId(sessionId).intValue();
+                    sessionDao.markCompleted(sessionId, totalPages, totalDownloaded);
                     log.info("Crawl completed for session: {}", sessionId);
+                } catch (Exception ex) {
+                    log.error("Error marking session as completed: {}", sessionId, ex);
                 }
             }
 
             @Override
             public void onError(Exception e) {
                 log.error("Crawl error for session: {}", sessionId, e);
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
-                if (s != null) {
-                    s.setStatus(CrawlSession.CrawlStatus.FAILED);
-                    s.setEndTime(LocalDateTime.now());
-                    sessionDao.save(s);
+                try {
+                    sessionDao.markFailed(sessionId);
+                } catch (Exception ex) {
+                    log.error("Error marking session as failed: {}", sessionId, ex);
                 }
             }
         });
@@ -236,36 +219,41 @@ public class CrawlerService {
     }
 
     public CrawlResponse pauseCrawl(Long sessionId) {
+        // Verify session exists
         CrawlSession session = sessionDao.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.pauseCrawl(sessionId);
-        session.setStatus(CrawlSession.CrawlStatus.PAUSED);
-        sessionDao.save(session);
+        sessionDao.updateStatus(sessionId, CrawlSession.CrawlStatus.PAUSED);
 
+        // Fetch updated session for response
+        session = sessionDao.findById(sessionId).orElse(session);
         return buildCrawlResponse(session);
     }
 
     public CrawlResponse resumeCrawl(Long sessionId) {
+        // Verify session exists
         CrawlSession session = sessionDao.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.resumeCrawl(sessionId);
-        session.setStatus(CrawlSession.CrawlStatus.RUNNING);
-        sessionDao.save(session);
+        sessionDao.updateStatus(sessionId, CrawlSession.CrawlStatus.RUNNING);
 
+        // Fetch updated session for response
+        session = sessionDao.findById(sessionId).orElse(session);
         return buildCrawlResponse(session);
     }
 
     public CrawlResponse stopCrawl(Long sessionId) {
+        // Verify session exists
         CrawlSession session = sessionDao.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.stopCrawl(sessionId);
-        session.setStatus(CrawlSession.CrawlStatus.STOPPED);
-        session.setEndTime(LocalDateTime.now());
-        sessionDao.save(session);
+        sessionDao.markStopped(sessionId);
 
+        // Fetch updated session for response
+        session = sessionDao.findById(sessionId).orElse(session);
         return buildCrawlResponse(session);
     }
 

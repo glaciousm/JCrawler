@@ -37,33 +37,39 @@ if exist target\jpackage-input rmdir /s /q target\jpackage-input
 mkdir target\jpackage-input
 copy target\jcrawler-1.0.0.jar target\jpackage-input\
 
-REM Copy JavaFX native DLLs from Maven repository
-echo Copying JavaFX native libraries...
-if not exist "%USERPROFILE%\.m2\repository\org\openjfx\javafx-graphics\21.0.1\javafx-graphics-21.0.1-win.jar" (
-    echo ERROR: JavaFX native libraries not found in Maven repository
-    echo Please run: mvn dependency:copy-dependencies first
-    pause
-    exit /b 1
+REM Download and prepare JavaFX jmods
+echo Downloading JavaFX jmods package...
+set JAVAFX_VERSION=21.0.1
+set JAVAFX_JMODS_DIR=target\javafx-jmods
+set JAVAFX_JMODS_ZIP=target\openjfx-%JAVAFX_VERSION%_windows-x64_bin-jmods.zip
+
+REM Download JavaFX jmods from Gluon if not already present
+if not exist "%JAVAFX_JMODS_ZIP%" (
+    echo   Downloading from Gluon HQ...
+    curl -L -o "%JAVAFX_JMODS_ZIP%" "https://download2.gluonhq.com/openjfx/%JAVAFX_VERSION%/openjfx-%JAVAFX_VERSION%_windows-x64_bin-jmods.zip"
+    if %ERRORLEVEL% NEQ 0 (
+        echo ERROR: Failed to download JavaFX jmods
+        pause
+        exit /b 1
+    )
+) else (
+    echo   Using cached JavaFX jmods package
 )
 
-REM Extract JavaFX DLLs from the native JARs
-mkdir target\javafx-natives
-cd target\javafx-natives
-"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-graphics\21.0.1\javafx-graphics-21.0.1-win.jar"
-"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-controls\21.0.1\javafx-controls-21.0.1-win.jar"
-"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-fxml\21.0.1\javafx-fxml-21.0.1-win.jar"
-"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-web\21.0.1\javafx-web-21.0.1-win.jar"
-"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-media\21.0.1\javafx-media-21.0.1-win.jar"
-cd ..\..
+REM Extract jmods (always extract to ensure they're valid)
+echo   Extracting jmods...
+if exist %JAVAFX_JMODS_DIR% rmdir /s /q %JAVAFX_JMODS_DIR%
+if exist target\javafx-temp rmdir /s /q target\javafx-temp
+powershell -Command "Expand-Archive -Path '%JAVAFX_JMODS_ZIP%' -DestinationPath 'target\javafx-temp' -Force"
+if not exist %JAVAFX_JMODS_DIR% mkdir %JAVAFX_JMODS_DIR%
+xcopy /Y target\javafx-temp\javafx-jmods-%JAVAFX_VERSION%\*.jmod %JAVAFX_JMODS_DIR%\
+rmdir /s /q target\javafx-temp
 
-REM Copy all DLLs to jpackage input
-echo Copying extracted DLLs...
-if exist target\javafx-natives\*.dll copy target\javafx-natives\*.dll target\jpackage-input\
-if exist target\javafx-natives\bin\*.dll copy target\javafx-natives\bin\*.dll target\jpackage-input\
+echo JavaFX jmods ready!
 
-REM Create native executable
+REM Create native executable with JavaFX modules
 echo.
-echo [4/4] Creating native executable...
+echo [4/4] Creating native executable with JavaFX runtime...
 if exist target\installer\JCrawler rmdir /s /q target\installer\JCrawler
 jpackage --type app-image ^
          --input target\jpackage-input ^
@@ -71,7 +77,9 @@ jpackage --type app-image ^
          --main-jar jcrawler-1.0.0.jar ^
          --main-class com.jcrawler.JCrawlerApplication ^
          --dest target\installer ^
-         --app-version 1.0.0
+         --app-version 1.0.0 ^
+         --module-path %JAVAFX_JMODS_DIR% ^
+         --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.web,javafx.media,java.naming,java.sql,java.management
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -79,12 +87,6 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b 1
 )
-
-REM Copy JavaFX DLLs to the executable's bin directory
-echo.
-echo Copying JavaFX DLLs to runtime...
-if exist target\javafx-natives\*.dll copy target\javafx-natives\*.dll target\installer\JCrawler\runtime\bin\
-if exist target\javafx-natives\bin\*.dll copy target\javafx-natives\bin\*.dll target\installer\JCrawler\runtime\bin\
 
 echo.
 echo ========================================

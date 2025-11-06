@@ -102,6 +102,7 @@ public class CrawlerEngine {
                     }
                 } catch (Exception e) {
                     log.error("Error processing page: {}", current.url, e);
+                    callback.onError(new RuntimeException("Failed to process page " + current.url + ": " + e.getMessage(), e));
                 } finally {
                     context.activeTasks.decrementAndGet();
                 }

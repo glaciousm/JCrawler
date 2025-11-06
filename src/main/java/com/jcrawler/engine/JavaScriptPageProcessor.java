@@ -1,9 +1,10 @@
 package com.jcrawler.engine;
 
 import com.jcrawler.model.Page;
-import com.microsoft.playwright.*;
-import com.microsoft.playwright.options.Cookie;
-import com.microsoft.playwright.options.WaitUntilState;
+import javafx.application.Platform;
+import javafx.concurrent.Worker;
+import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebView;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -11,90 +12,161 @@ import org.jsoup.nodes.Document;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class JavaScriptPageProcessor {
 
-    private Playwright playwright;
-    private Browser browser;
-    private BrowserContext sharedContext;
+    private WebView webView;
+    private WebEngine webEngine;
+    private final Object lock = new Object();
 
     public JavaScriptPageProcessor() {
-        // Initialize Playwright lazily
+        // Initialize WebView on JavaFX thread
+        initWebView();
     }
 
-    private synchronized void initPlaywright() {
-        if (playwright == null) {
-            log.info("Initializing Playwright...");
-            playwright = Playwright.create();
-            browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
-                    .setHeadless(true)
-                    .setArgs(java.util.Arrays.asList("--no-sandbox", "--disable-dev-shm-usage")));
+    private void initWebView() {
+        CountDownLatch latch = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            try {
+                log.info("Initializing JavaFX WebView for JavaScript rendering...");
+                log.warn("NOTE: WebView processes pages sequentially. Concurrent threads setting will be ignored for JavaScript rendering.");
+                webView = new WebView();
+                webEngine = webView.getEngine();
+                webEngine.setJavaScriptEnabled(true);
+                webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JCrawler/1.0 WebView");
+                log.info("JavaFX WebView initialized successfully");
+            } catch (Exception e) {
+                log.error("Failed to initialize WebView: {}", e.getMessage(), e);
+            } finally {
+                latch.countDown();
+            }
+        });
 
-            // Create a shared context for all pages
-            sharedContext = browser.newContext(new Browser.NewContextOptions()
-                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JCrawler/1.0 Playwright"));
-
-            log.info("Playwright initialized successfully");
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            log.error("WebView initialization timeout", e);
+            Thread.currentThread().interrupt();
         }
     }
 
     public synchronized PageProcessor.PageResult fetchAndParse(String url, Map<String, String> cookies, Long sessionId, String parentUrl, Integer depth) {
-        if (playwright == null) {
-            initPlaywright();
-        }
-
         long startTime = System.currentTimeMillis();
         PageProcessor.PageResult result = new PageProcessor.PageResult();
 
-        com.microsoft.playwright.Page page = null;
+        if (webEngine == null) {
+            result.success = false;
+            result.errorMessage = "WebView not initialized";
+            result.statusCode = 0;
+            buildPageEntity(result, url, sessionId, parentUrl, depth, startTime);
+            return result;
+        }
+
+        CountDownLatch loadLatch = new CountDownLatch(1);
+        AtomicReference<String> htmlRef = new AtomicReference<>();
+        AtomicReference<String> titleRef = new AtomicReference<>();
+        AtomicReference<Exception> errorRef = new AtomicReference<>();
+
+        Platform.runLater(() -> {
+            try {
+                // Set up ONE-TIME load listener
+                webEngine.getLoadWorker().stateProperty().addListener(new javafx.beans.value.ChangeListener<Worker.State>() {
+                    @Override
+                    public void changed(javafx.beans.value.ObservableValue<? extends Worker.State> obs, Worker.State oldState, Worker.State newState) {
+                        if (newState == Worker.State.SUCCEEDED) {
+                            // Remove listener to prevent multiple triggers
+                            webEngine.getLoadWorker().stateProperty().removeListener(this);
+
+                            // Wait for React to render (in background thread)
+                            new Thread(() -> {
+                                try {
+                                    // Wait longer for React to fully render
+                                    Thread.sleep(3000);
+
+                                    // Get rendered HTML on FX thread
+                                    Platform.runLater(() -> {
+                                        try {
+                                            String html = (String) webEngine.executeScript("document.documentElement.outerHTML");
+                                            htmlRef.set(html);
+                                            titleRef.set(webEngine.getTitle());
+
+                                            log.debug("WebView rendered page, HTML length: {}", html != null ? html.length() : 0);
+                                        } catch (Exception e) {
+                                            errorRef.set(e);
+                                        } finally {
+                                            loadLatch.countDown();
+                                        }
+                                    });
+                                } catch (Exception e) {
+                                    errorRef.set(e);
+                                    loadLatch.countDown();
+                                }
+                            }).start();
+                        } else if (newState == Worker.State.FAILED) {
+                            webEngine.getLoadWorker().stateProperty().removeListener(this);
+                            errorRef.set(new RuntimeException("Failed to load page"));
+                            loadLatch.countDown();
+                        }
+                    }
+                });
+
+                // Load the URL
+                webEngine.load(url);
+
+            } catch (Exception e) {
+                errorRef.set(e);
+                loadLatch.countDown();
+            }
+        });
 
         try {
-            // Create new page in shared context
-            page = sharedContext.newPage();
+            // Wait for page to load (max 30 seconds)
+            boolean loaded = loadLatch.await(30, TimeUnit.SECONDS);
 
-            // Navigate to URL and wait for network idle
-            Response response = page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.NETWORKIDLE)
-                    .setTimeout(30000));
-
-            result.statusCode = response.status();
-            result.success = response.ok();
-
-            if (response.ok()) {
-                // Wait a bit for React to render
-                page.waitForTimeout(1000);
-
-                // Get the fully rendered HTML
-                String html = page.content();
-                result.document = Jsoup.parse(html, url);
-                result.title = page.title();
-                result.contentHash = calculateHash(html);
-
-                log.debug("Fetched {} with Playwright: {} links found", url, result.document.select("a[href]").size());
+            if (!loaded) {
+                result.success = false;
+                result.errorMessage = "Page load timeout";
+                result.statusCode = 0;
+            } else if (errorRef.get() != null) {
+                result.success = false;
+                result.errorMessage = errorRef.get().getMessage();
+                result.statusCode = 0;
             } else {
-                result.errorMessage = "HTTP " + response.status() + ": " + response.statusText();
+                String html = htmlRef.get();
+                if (html != null && !html.isEmpty()) {
+                    result.document = Jsoup.parse(html, url);
+                    result.title = titleRef.get();
+                    result.contentHash = calculateHash(html);
+                    result.success = true;
+                    result.statusCode = 200;
+
+                    log.debug("Fetched {} with WebView: {} links found", url, result.document.select("a[href]").size());
+                } else {
+                    result.success = false;
+                    result.errorMessage = "Empty HTML response";
+                    result.statusCode = 0;
+                }
             }
 
         } catch (Exception e) {
-            log.error("Failed to fetch URL with Playwright: {}", url, e);
+            log.error("Failed to fetch URL with WebView: {}", url, e);
             result.success = false;
             result.errorMessage = e.getMessage();
-        } finally {
-            // Clean up page only
-            if (page != null) {
-                try {
-                    page.close();
-                } catch (Exception e) {
-                    log.warn("Error closing page", e);
-                }
-            }
+            result.statusCode = 0;
         }
 
+        buildPageEntity(result, url, sessionId, parentUrl, depth, startTime);
+        return result;
+    }
+
+    private void buildPageEntity(PageProcessor.PageResult result, String url, Long sessionId, String parentUrl, Integer depth, long startTime) {
         long endTime = System.currentTimeMillis();
         result.processingTime = endTime - startTime;
 
-        // Build Page entity
         result.page = Page.builder()
                 .sessionId(sessionId)
                 .url(url)
@@ -108,8 +180,6 @@ public class JavaScriptPageProcessor {
                 .errorMessage(result.errorMessage)
                 .processed(result.success)
                 .build();
-
-        return result;
     }
 
     private String calculateHash(String content) {
@@ -138,18 +208,7 @@ public class JavaScriptPageProcessor {
     }
 
     public void shutdown() {
-        if (sharedContext != null) {
-            try {
-                sharedContext.close();
-            } catch (Exception e) {
-                log.warn("Error closing shared context", e);
-            }
-        }
-        if (browser != null) {
-            browser.close();
-        }
-        if (playwright != null) {
-            playwright.close();
-        }
+        // WebView cleanup is handled by JavaFX lifecycle
+        log.info("JavaScriptPageProcessor shutdown complete");
     }
 }

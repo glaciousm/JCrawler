@@ -28,4 +28,69 @@ public class CrawlSessionDao extends BaseDao<CrawlSession, Long> {
             return query.list();
         });
     }
+
+    public void incrementTotalFlows(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET totalFlows = totalFlows + 1 WHERE id = :id")
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void incrementTotalDownloaded(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET totalDownloaded = totalDownloaded + 1 WHERE id = :id")
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void incrementTotalExternalUrls(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET totalExternalUrls = totalExternalUrls + 1 WHERE id = :id")
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void markCompleted(Long sessionId, Integer totalPages, Integer totalDownloaded) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET status = :status, endTime = :endTime, totalPages = :totalPages, totalDownloaded = :totalDownloaded WHERE id = :id")
+                .setParameter("status", CrawlSession.CrawlStatus.COMPLETED)
+                .setParameter("endTime", java.time.LocalDateTime.now())
+                .setParameter("totalPages", totalPages)
+                .setParameter("totalDownloaded", totalDownloaded)
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void markFailed(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET status = :status, endTime = :endTime WHERE id = :id")
+                .setParameter("status", CrawlSession.CrawlStatus.FAILED)
+                .setParameter("endTime", java.time.LocalDateTime.now())
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void updateStatus(Long sessionId, CrawlSession.CrawlStatus status) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET status = :status WHERE id = :id")
+                .setParameter("status", status)
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
+    public void markStopped(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET status = :status, endTime = :endTime WHERE id = :id")
+                .setParameter("status", CrawlSession.CrawlStatus.STOPPED)
+                .setParameter("endTime", java.time.LocalDateTime.now())
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
 }
