@@ -1,18 +1,11 @@
 package com.jcrawler.service;
 
-import com.jcrawler.dto.ProgressUpdate;
+import com.jcrawler.dao.DownloadedFileDao;
 import com.jcrawler.model.DownloadedFile;
-import com.jcrawler.repository.CrawlSessionRepository;
-import com.jcrawler.repository.DownloadedFileRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,24 +20,22 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@Service
-@RequiredArgsConstructor
 @Slf4j
 public class DownloadService {
 
-    private final DownloadedFileRepository downloadedFileRepository;
-    private final CrawlSessionRepository sessionRepository;
-    private final SimpMessagingTemplate messagingTemplate;
-
-    @Value("${jcrawler.download.directory:downloads}")
-    private String downloadDirectory;
+    private final DownloadedFileDao downloadedFileDao;
+    private final String downloadDirectory;
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build();
 
-    @Async("downloadExecutor")
+    public DownloadService(DownloadedFileDao downloadedFileDao) {
+        this.downloadedFileDao = downloadedFileDao;
+        this.downloadDirectory = "downloads"; // Default download directory
+    }
+
     public void downloadFile(String url, Long sessionId, Long pageId) {
         log.info("Downloading file: {}", url);
 
@@ -113,23 +104,7 @@ public class DownloadService {
             downloadedFile.setFileExtension(fileExtension);
             downloadedFile.setDownloadSuccess(true);
 
-            downloadedFileRepository.save(downloadedFile);
-
-            // Update session total downloads
-            final String finalFileName = fileName;
-            sessionRepository.findById(sessionId).ifPresent(session -> {
-                session.setTotalDownloaded(session.getTotalDownloaded() + 1);
-                sessionRepository.save(session);
-
-                // Send WebSocket update
-                ProgressUpdate update = ProgressUpdate.fileDownloaded(
-                        sessionId,
-                        finalFileName,
-                        downloadedFile.getFileSize(),
-                        session.getTotalDownloaded()
-                );
-                messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
-            });
+            downloadedFileDao.save(downloadedFile);
 
             log.info("Successfully downloaded: {}", fileName);
 
@@ -137,16 +112,16 @@ public class DownloadService {
             log.error("Failed to download file: {}", url, e);
             downloadedFile.setDownloadSuccess(false);
             downloadedFile.setErrorMessage(e.getMessage());
-            downloadedFileRepository.save(downloadedFile);
+            downloadedFileDao.save(downloadedFile);
         }
     }
 
     public List<DownloadedFile> getDownloadedFiles(Long sessionId) {
-        return downloadedFileRepository.findBySessionId(sessionId);
+        return downloadedFileDao.findBySessionId(sessionId);
     }
 
     public DownloadedFile getDownloadedFile(Long fileId) {
-        return downloadedFileRepository.findById(fileId)
+        return downloadedFileDao.findById(fileId)
                 .orElseThrow(() -> new IllegalArgumentException("File not found"));
     }
 
