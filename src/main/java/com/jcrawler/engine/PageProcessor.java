@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.security.MessageDigest;
@@ -13,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-@Component
 @Slf4j
 public class PageProcessor {
 

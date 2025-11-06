@@ -1,12 +1,9 @@
 package com.jcrawler.service;
 
-import com.jcrawler.dto.ProgressUpdate;
+import com.jcrawler.dao.ExtractedDataDao;
 import com.jcrawler.model.ExtractedData;
 import com.jcrawler.model.ExtractionRule;
 import com.jcrawler.model.Page;
-import com.jcrawler.repository.CrawlSessionRepository;
-import com.jcrawler.repository.ExtractedDataRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -15,29 +12,24 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
 
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathFactory;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@Service
-@RequiredArgsConstructor
 @Slf4j
 public class ExtractionService {
 
-    private final ExtractedDataRepository extractedDataRepository;
-    private final CrawlSessionRepository sessionRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ExtractedDataDao extractedDataDao;
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
+
+    public ExtractionService(ExtractedDataDao extractedDataDao) {
+        this.extractedDataDao = extractedDataDao;
+    }
 
     public List<ExtractedData> extractData(Page page, List<ExtractionRule> rules) {
         List<ExtractedData> extractedDataList = new ArrayList<>();
@@ -75,24 +67,7 @@ public class ExtractionService {
                             .extractedAt(LocalDateTime.now())
                             .build();
 
-                    extractedDataList.add(extractedDataRepository.save(data));
-                }
-
-                // Update session total extracted count
-                if (!extractedValues.isEmpty()) {
-                    sessionRepository.findById(page.getSessionId()).ifPresent(session -> {
-                        session.setTotalExtracted(session.getTotalExtracted() + extractedValues.size());
-                        sessionRepository.save(session);
-                    });
-
-                    // Send WebSocket update
-                    ProgressUpdate update = ProgressUpdate.dataExtracted(
-                            page.getSessionId(),
-                            rule.getRuleName(),
-                            extractedValues.size(),
-                            extractedValues.get(0)
-                    );
-                    messagingTemplate.convertAndSend("/topic/crawler/" + page.getSessionId() + "/progress", update);
+                    extractedDataList.add(extractedDataDao.save(data));
                 }
             }
 
@@ -135,21 +110,7 @@ public class ExtractionService {
 
     private List<String> extractByXPath(Document document, ExtractionRule rule) {
         List<String> results = new ArrayList<>();
-
-        try {
-            // Convert JSoup Document to W3C Document for XPath
-            XPathFactory xPathFactory = XPathFactory.newInstance();
-            XPath xpath = xPathFactory.newXPath();
-
-            // Note: XPath with JSoup requires additional handling
-            // For simplicity, we'll use CSS selectors as the primary method
-            // Full XPath support would require converting to W3C DOM
-            log.warn("XPath support is limited. Consider using CSS selectors instead.");
-
-        } catch (Exception e) {
-            log.error("XPath extraction failed: {}", e.getMessage());
-        }
-
+        log.warn("XPath support is limited. Consider using CSS selectors instead.");
         return results;
     }
 
@@ -168,10 +129,10 @@ public class ExtractionService {
     }
 
     public List<ExtractedData> getExtractedData(Long sessionId) {
-        return extractedDataRepository.findBySessionId(sessionId);
+        return extractedDataDao.findBySessionId(sessionId);
     }
 
     public List<ExtractedData> getExtractedDataByRule(Long sessionId, Long ruleId) {
-        return extractedDataRepository.findBySessionIdAndRuleId(sessionId, ruleId);
+        return extractedDataDao.findBySessionIdAndRuleId(sessionId, ruleId);
     }
 }

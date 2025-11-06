@@ -1,34 +1,27 @@
 package com.jcrawler.engine;
 
-import com.jcrawler.dto.ProgressUpdate;
 import com.jcrawler.model.CrawlSession;
 import com.jcrawler.model.Page;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.nodes.Document;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@Component
 @Slf4j
 public class CrawlerEngine {
 
     private final PageProcessor pageProcessor;
     private final JavaScriptPageProcessor jsPageProcessor;
     private final LinkExtractor linkExtractor;
-    private final SimpMessagingTemplate messagingTemplate;
 
     // Track running crawls
     private final Map<Long, CrawlContext> activeCrawls = new ConcurrentHashMap<>();
 
-    public CrawlerEngine(PageProcessor pageProcessor, JavaScriptPageProcessor jsPageProcessor, LinkExtractor linkExtractor, SimpMessagingTemplate messagingTemplate) {
-        this.pageProcessor = pageProcessor;
-        this.jsPageProcessor = jsPageProcessor;
+    public CrawlerEngine(LinkExtractor linkExtractor, PageProcessor pageProcessor, ExecutorService executorService) {
         this.linkExtractor = linkExtractor;
-        this.messagingTemplate = messagingTemplate;
+        this.pageProcessor = pageProcessor;
+        this.jsPageProcessor = new JavaScriptPageProcessor();
     }
 
     public void startCrawl(CrawlSession session, CrawlCallback callback) {
@@ -109,18 +102,17 @@ public class CrawlerEngine {
                     }
                 } catch (Exception e) {
                     log.error("Error processing page: {}", current.url, e);
-                    sendLog(session.getId(), "ERROR", "Failed to process: " + current.url);
                 } finally {
                     context.activeTasks.decrementAndGet();
                 }
             });
 
-            // Send metrics update every 5 seconds
+            // Metrics tracking (no WebSocket in desktop app)
             long now = System.currentTimeMillis();
             if (now - lastMetricsUpdate > 5000) {
                 int currentPageCount = context.visitedUrls.size();
                 double pagesPerSecond = (currentPageCount - lastPageCount) / 5.0;
-                sendMetrics(session.getId(), pagesPerSecond, session.getConcurrentThreads(), context.toVisit.size());
+                log.debug("Metrics: {}/s, {} threads, {} queued", pagesPerSecond, session.getConcurrentThreads(), context.toVisit.size());
                 lastMetricsUpdate = now;
                 lastPageCount = currentPageCount;
             }
@@ -161,8 +153,7 @@ public class CrawlerEngine {
         // Save page
         callback.onPageDiscovered(result.page);
 
-        // Send progress update
-        sendPageDiscovered(session.getId(), urlPair.url, urlPair.depth, context.visitedUrls.size());
+        // Progress updates removed (no WebSocket in desktop app)
 
         if (result.success && result.document != null) {
             // Extract links
@@ -223,7 +214,7 @@ public class CrawlerEngine {
         CrawlContext context = activeCrawls.get(sessionId);
         if (context != null) {
             context.paused = true;
-            sendLog(sessionId, "INFO", "Crawl paused");
+            log.info("Crawl paused for session {}", sessionId);
         }
     }
 
@@ -231,7 +222,7 @@ public class CrawlerEngine {
         CrawlContext context = activeCrawls.get(sessionId);
         if (context != null) {
             context.paused = false;
-            sendLog(sessionId, "INFO", "Crawl resumed");
+            log.info("Crawl resumed for session {}", sessionId);
         }
     }
 
@@ -239,24 +230,8 @@ public class CrawlerEngine {
         CrawlContext context = activeCrawls.get(sessionId);
         if (context != null) {
             context.stopped = true;
-            sendLog(sessionId, "INFO", "Crawl stopped");
+            log.info("Crawl stopped for session {}", sessionId);
         }
-    }
-
-    // WebSocket messaging methods
-    private void sendPageDiscovered(Long sessionId, String url, Integer depth, Integer totalPages) {
-        ProgressUpdate update = ProgressUpdate.pageDiscovered(sessionId, url, depth, totalPages);
-        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
-    }
-
-    private void sendMetrics(Long sessionId, Double pagesPerSecond, Integer activeThreads, Integer queueSize) {
-        ProgressUpdate update = ProgressUpdate.metrics(sessionId, pagesPerSecond, activeThreads, queueSize);
-        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
-    }
-
-    private void sendLog(Long sessionId, String level, String message) {
-        ProgressUpdate update = ProgressUpdate.log(sessionId, level, message);
-        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
     }
 
     private boolean isFileUrl(String url) {
