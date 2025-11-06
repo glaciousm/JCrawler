@@ -157,6 +157,10 @@ public class CrawlerService {
                     if (s != null) {
                         s.setTotalDownloaded(s.getTotalDownloaded() + 1);
                         sessionRepository.save(s);
+
+                        // Send WebSocket update
+                        ProgressUpdate update = ProgressUpdate.fileDownloaded(sessionId, fileName, 0L, s.getTotalDownloaded());
+                        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
                     }
                 } catch (Exception e) {
                     log.error("Error saving file reference: {}", e.getMessage());
