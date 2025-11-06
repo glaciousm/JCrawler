@@ -37,6 +37,30 @@ if exist target\jpackage-input rmdir /s /q target\jpackage-input
 mkdir target\jpackage-input
 copy target\jcrawler-1.0.0.jar target\jpackage-input\
 
+REM Copy JavaFX native DLLs from Maven repository
+echo Copying JavaFX native libraries...
+if not exist "%USERPROFILE%\.m2\repository\org\openjfx\javafx-graphics\21.0.1\javafx-graphics-21.0.1-win.jar" (
+    echo ERROR: JavaFX native libraries not found in Maven repository
+    echo Please run: mvn dependency:copy-dependencies first
+    pause
+    exit /b 1
+)
+
+REM Extract JavaFX DLLs from the native JARs
+mkdir target\javafx-natives
+cd target\javafx-natives
+"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-graphics\21.0.1\javafx-graphics-21.0.1-win.jar"
+"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-controls\21.0.1\javafx-controls-21.0.1-win.jar"
+"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-fxml\21.0.1\javafx-fxml-21.0.1-win.jar"
+"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-web\21.0.1\javafx-web-21.0.1-win.jar"
+"%JAVA_HOME%\bin\jar.exe" xf "%USERPROFILE%\.m2\repository\org\openjfx\javafx-media\21.0.1\javafx-media-21.0.1-win.jar"
+cd ..\..
+
+REM Copy all DLLs to jpackage input
+echo Copying extracted DLLs...
+if exist target\javafx-natives\*.dll copy target\javafx-natives\*.dll target\jpackage-input\
+if exist target\javafx-natives\bin\*.dll copy target\javafx-natives\bin\*.dll target\jpackage-input\
+
 REM Create native executable
 echo.
 echo [4/4] Creating native executable...
@@ -55,6 +79,12 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b 1
 )
+
+REM Copy JavaFX DLLs to the executable's bin directory
+echo.
+echo Copying JavaFX DLLs to runtime...
+if exist target\javafx-natives\*.dll copy target\javafx-natives\*.dll target\installer\JCrawler\runtime\bin\
+if exist target\javafx-natives\bin\*.dll copy target\javafx-natives\bin\*.dll target\installer\JCrawler\runtime\bin\
 
 echo.
 echo ========================================
