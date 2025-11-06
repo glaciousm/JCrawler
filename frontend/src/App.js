@@ -578,7 +578,7 @@ function Dashboard({ stats, logs, flows, extractedData, pages, activeTab, setAct
             </div>
 
             {/* Export Panel */}
-            {sessionId && (
+            {sessionId && crawlStatus === 'COMPLETED' && (
                 <ExportPanel onExport={onExport} />
             )}
         </div>
