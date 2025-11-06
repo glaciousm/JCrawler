@@ -1,38 +1,38 @@
 package com.jcrawler;
 
+import com.jcrawler.core.AppContext;
 import com.jcrawler.ui.MainStage;
 import javafx.application.Application;
 import javafx.stage.Stage;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.scheduling.annotation.EnableAsync;
 
-@SpringBootApplication
-@EnableAsync
 public class JCrawlerApplication extends Application {
 
-    private ConfigurableApplicationContext springContext;
+    private AppContext appContext;
 
     @Override
     public void init() {
-        // Initialize Spring Boot context without web server
-        springContext = new SpringApplicationBuilder(JCrawlerApplication.class)
-                .headless(false)
-                .run();
+        // Initialize application context
+        appContext = AppContext.getInstance();
     }
 
     @Override
     public void start(Stage primaryStage) {
-        // Get the MainStage bean and set up the UI
-        MainStage mainStage = springContext.getBean(MainStage.class);
+        // Create and start the main stage
+        MainStage mainStage = new MainStage(
+            appContext.getCrawlerService(),
+            appContext.getCrawlSessionDao(),
+            appContext.getDownloadedFileDao(),
+            appContext.getExportService()
+        );
         mainStage.start(primaryStage);
     }
 
     @Override
     public void stop() {
-        // Close Spring context when application closes
-        springContext.close();
+        // Shutdown application context
+        if (appContext != null) {
+            appContext.shutdown();
+        }
     }
 
     public static void main(String[] args) {

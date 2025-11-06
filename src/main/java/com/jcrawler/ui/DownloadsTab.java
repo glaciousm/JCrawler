@@ -1,7 +1,7 @@
 package com.jcrawler.ui;
 
+import com.jcrawler.dao.DownloadedFileDao;
 import com.jcrawler.model.DownloadedFile;
-import com.jcrawler.repository.DownloadedFileRepository;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -14,19 +14,19 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
 import java.awt.Desktop;
 import java.net.URI;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-@Component
-@RequiredArgsConstructor
 public class DownloadsTab {
 
-    private final DownloadedFileRepository downloadRepository;
+    private final DownloadedFileDao downloadDao;
+
+    public DownloadsTab(DownloadedFileDao downloadDao) {
+        this.downloadDao = downloadDao;
+    }
 
     private TableView<DownloadedFile> downloadTable;
     private ObservableList<DownloadedFile> downloadData;
@@ -161,7 +161,7 @@ public class DownloadsTab {
     private void loadAllDownloads() {
         new Thread(() -> {
             try {
-                List<DownloadedFile> downloads = downloadRepository.findAll();
+                List<DownloadedFile> downloads = downloadDao.findAll();
                 Platform.runLater(() -> {
                     downloadData.clear();
                     downloadData.addAll(downloads);
@@ -184,7 +184,7 @@ public class DownloadsTab {
             Long sessionId = Long.parseLong(sessionIdText);
             new Thread(() -> {
                 try {
-                    List<DownloadedFile> downloads = downloadRepository.findBySessionId(sessionId);
+                    List<DownloadedFile> downloads = downloadDao.findBySessionId(sessionId);
                     Platform.runLater(() -> {
                         downloadData.clear();
                         downloadData.addAll(downloads);

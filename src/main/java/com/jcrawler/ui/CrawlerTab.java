@@ -10,14 +10,14 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
-@Component
-@RequiredArgsConstructor
 public class CrawlerTab {
 
     private final CrawlerService crawlerService;
+
+    public CrawlerTab(CrawlerService crawlerService) {
+        this.crawlerService = crawlerService;
+    }
 
     private TextField urlField;
     private Spinner<Integer> maxDepthSpinner;

@@ -1,7 +1,7 @@
 package com.jcrawler.ui;
 
+import com.jcrawler.dao.CrawlSessionDao;
 import com.jcrawler.model.CrawlSession;
-import com.jcrawler.repository.CrawlSessionRepository;
 import com.jcrawler.service.ExportService;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -16,19 +16,20 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-@Component
-@RequiredArgsConstructor
 public class SessionsTab {
 
-    private final CrawlSessionRepository sessionRepository;
+    private final CrawlSessionDao sessionDao;
     private final ExportService exportService;
+
+    public SessionsTab(CrawlSessionDao sessionDao, ExportService exportService) {
+        this.sessionDao = sessionDao;
+        this.exportService = exportService;
+    }
 
     private TableView<CrawlSession> sessionTable;
     private ObservableList<CrawlSession> sessionData;
@@ -157,7 +158,7 @@ public class SessionsTab {
     private void loadSessions() {
         new Thread(() -> {
             try {
-                List<CrawlSession> sessions = sessionRepository.findAll();
+                List<CrawlSession> sessions = sessionDao.findAll();
                 Platform.runLater(() -> {
                     sessionData.clear();
                     sessionData.addAll(sessions);
@@ -249,7 +250,7 @@ public class SessionsTab {
             if (response == ButtonType.OK) {
                 new Thread(() -> {
                     try {
-                        sessionRepository.deleteById(selected.getId());
+                        sessionDao.deleteById(selected.getId());
                         Platform.runLater(() -> {
                             sessionData.remove(selected);
                             showInfo("Success", "Session deleted successfully");
