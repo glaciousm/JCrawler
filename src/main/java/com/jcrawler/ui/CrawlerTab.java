@@ -174,12 +174,23 @@ public class CrawlerTab {
                 .downloadFiles(downloadFilesCheckBox.isSelected())
                 .build();
 
+        // Clear log area
+        logArea.clear();
+        logArea.appendText("=== STARTING CRAWL ===\n");
+        logArea.appendText("URL: " + url + "\n");
+        logArea.appendText("JavaScript: " + enableJsCheckBox.isSelected() + "\n");
+        logArea.appendText("Max Depth: " + maxDepthSpinner.getValue() + "\n\n");
+
         // Set up UI callback for real-time logging
+        System.out.println("[CrawlerTab] Setting UI callback...");
         crawlerService.setUICallback(message -> {
+            System.out.println("[CrawlerTab] Callback received message: " + message);
             Platform.runLater(() -> {
+                System.out.println("[CrawlerTab] Appending to logArea: " + message);
                 logArea.appendText(message + "\n");
             });
         });
+        System.out.println("[CrawlerTab] UI callback set!");
 
         // Start crawl in background thread
         new Thread(() -> {

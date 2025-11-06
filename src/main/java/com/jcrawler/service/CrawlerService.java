@@ -58,8 +58,13 @@ public class CrawlerService {
     }
 
     private void logToUI(String message) {
+        System.out.println("[CrawlerService] logToUI called: " + message);
+        System.out.println("[CrawlerService] uiCallback is: " + (uiCallback != null ? "SET" : "NULL"));
         if (uiCallback != null) {
+            System.out.println("[CrawlerService] Calling uiCallback.onLog()");
             uiCallback.onLog(message);
+        } else {
+            System.out.println("[CrawlerService] WARNING: uiCallback is NULL!");
         }
         log.info(message);
     }
