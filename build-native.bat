@@ -8,7 +8,7 @@ echo ========================================
 echo.
 
 REM Step 1: Build the application
-echo [1/3] Building application with Maven...
+echo [1/4] Building application with Maven...
 call mvn clean package -DskipTests
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Maven build failed
@@ -19,7 +19,7 @@ echo Build successful!
 echo.
 
 REM Step 2: Create runtime image with jlink
-echo [2/3] Creating custom runtime with jlink...
+echo [2/4] Creating custom runtime with jlink...
 if exist target\runtime rmdir /s /q target\runtime
 
 jlink --add-modules java.base,java.desktop,java.sql,java.naming,java.management,java.instrument,java.xml,jdk.unsupported,javafx.controls,javafx.fxml,javafx.graphics,javafx.web ^
@@ -41,6 +41,7 @@ echo Runtime created!
 echo.
 
 REM Step 3: Prepare jpackage input (use shaded JAR to avoid path length issues)
+echo.
 echo [3/4] Preparing jpackage input...
 if exist target\jpackage-input rmdir /s /q target\jpackage-input
 mkdir target\jpackage-input
