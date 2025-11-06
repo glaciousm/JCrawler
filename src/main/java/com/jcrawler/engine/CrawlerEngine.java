@@ -61,7 +61,8 @@ public class CrawlerEngine {
         long lastMetricsUpdate = System.currentTimeMillis();
         int lastPageCount = 0;
 
-        while ((context.activeTasks.get() > 0 || !context.toVisit.isEmpty()) && context.visitedUrls.size() < session.getMaxPages()) {
+        while ((context.activeTasks.get() > 0 || !context.toVisit.isEmpty()) &&
+               (session.getMaxPages() == 0 || context.visitedUrls.size() < session.getMaxPages())) {
             if (context.paused) {
                 Thread.sleep(1000);
                 continue;
@@ -84,7 +85,7 @@ public class CrawlerEngine {
                 continue;
             }
 
-            if (current.depth > session.getMaxDepth()) {
+            if (session.getMaxDepth() > 0 && current.depth > session.getMaxDepth()) {
                 continue;
             }
 
@@ -192,7 +193,12 @@ public class CrawlerEngine {
                     result.document,
                     urlPair.url,
                     session.getBaseDomain(),
-                    List.of(".pdf", ".docx", ".doc", ".xlsx", ".xls", ".zip", ".png", ".jpg", ".jpeg")
+                    List.of(".pdf", ".docx", ".doc", ".xlsx", ".xls", ".ppt", ".pptx",
+                            ".zip", ".rar", ".7z", ".tar", ".gz",
+                            ".csv", ".txt", ".json", ".xml",
+                            ".png", ".jpg", ".jpeg", ".gif", ".svg", ".bmp", ".webp",
+                            ".odt", ".ods", ".odp", ".rtf",
+                            ".sql", ".log", ".md")
             );
 
             for (String attachment : attachments) {
@@ -206,9 +212,8 @@ public class CrawlerEngine {
                     session.getBaseDomain()
             );
 
-            System.out.println("DEBUG: Calling callback for " + externalUrls.size() + " external URLs");
             for (String externalUrl : externalUrls) {
-                System.out.println("DEBUG: Calling callback.onExternalUrlFound(" + externalUrl + ")");
+                // Save all external URLs for each page (including duplicates across pages)
                 callback.onExternalUrlFound(externalUrl, urlPair.url);
             }
         }

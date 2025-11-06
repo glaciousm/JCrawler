@@ -27,14 +27,14 @@ public class CrawlRequest {
     private List<ExtractionRuleDto> extractionRules;
 
     @Builder.Default
-    @Min(1)
+    @Min(0)
     @Max(50)
-    private Integer maxDepth = 10;
+    private Integer maxDepth = 0; // 0 means infinite
 
     @Builder.Default
-    @Min(1)
+    @Min(0)
     @Max(10000)
-    private Integer maxPages = 1000;
+    private Integer maxPages = 0; // 0 means infinite
 
     @Builder.Default
     @Min(0)

@@ -22,8 +22,8 @@ function App() {
     // Configuration state
     const [config, setConfig] = useState({
         startUrl: '',
-        maxDepth: 5,
-        maxPages: 100,
+        maxDepth: 0, // 0 means infinite
+        maxPages: 0, // 0 means infinite
         requestDelay: 1.0,
         concurrentThreads: 5,
         downloadFiles: true,
@@ -377,25 +377,27 @@ function ConfigPanel({
             )}
 
             <div className="form-group">
-                <label>Max Depth</label>
+                <label>Max Depth <span style={{color: '#999', fontSize: '12px', fontWeight: 'normal'}}>(0 = infinite)</span></label>
                 <input
                     type="number"
                     value={config.maxDepth}
                     onChange={(e) => setConfig({ ...config, maxDepth: e.target.value })}
-                    min="1"
+                    min="0"
                     max="50"
+                    placeholder="0 for infinite"
                     disabled={sessionId}
                 />
             </div>
 
             <div className="form-group">
-                <label>Max Pages</label>
+                <label>Max Pages <span style={{color: '#999', fontSize: '12px', fontWeight: 'normal'}}>(0 = infinite)</span></label>
                 <input
                     type="number"
                     value={config.maxPages}
                     onChange={(e) => setConfig({ ...config, maxPages: e.target.value })}
-                    min="1"
+                    min="0"
                     max="10000"
+                    placeholder="0 for infinite"
                     disabled={sessionId}
                 />
             </div>
@@ -561,51 +563,6 @@ function Dashboard({ stats, logs, flows, extractedData, pages, activeTab, setAct
                 <StatCard label="Queue" value={stats.queueSize} />
             </div>
 
-            {/* Content Area */}
-            <div className="content-area">
-                {/* Visualization Panel */}
-                <div className="visualization-panel">
-                    <div className="viz-header">
-                        <h3>Visualization</h3>
-                        <div className="viz-tabs">
-                            <div
-                                className={`viz-tab ${activeTab === 'flows' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('flows')}
-                            >
-                                Flows
-                            </div>
-                            <div
-                                className={`viz-tab ${activeTab === 'pages' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('pages')}
-                            >
-                                Pages
-                            </div>
-                        </div>
-                    </div>
-                    <div className="viz-content">
-                        {activeTab === 'flows' && <FlowVisualization flows={flows} />}
-                        {activeTab === 'pages' && <PagesList pages={pages} />}
-                    </div>
-                </div>
-
-                {/* Data Panel */}
-                <div className="data-panel">
-                    <h3>Extracted Data ({extractedData.length})</h3>
-                    <div className="data-list">
-                        {extractedData.length === 0 && (
-                            <div style={{color: '#666', textAlign: 'center', marginTop: '20px'}}>
-                                No data extracted yet
-                            </div>
-                        )}
-                        {extractedData.map((item, index) => (
-                            <div key={index} className="data-item">
-                                <div className="data-item-header">{item.ruleName}</div>
-                                <div className="data-item-content">{item.value}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
 
             {/* Activity Log */}
             <div style={{padding: '20px', paddingTop: '10px'}}>
@@ -706,7 +663,7 @@ function PagesList({ pages }) {
 
 // Export Panel Component
 function ExportPanel({ onExport }) {
-    const [selectedFormats, setSelectedFormats] = useState(['JSON']);
+    const [selectedFormats, setSelectedFormats] = useState(['CSV']);
 
     const toggleFormat = (format) => {
         setSelectedFormats(prev =>
@@ -721,7 +678,7 @@ function ExportPanel({ onExport }) {
             <div className="export-options">
                 <strong style={{color: '#667eea'}}>Export:</strong>
                 <div className="export-format-group">
-                    {['JSON', 'CSV', 'EXCEL', 'PDF'].map(format => (
+                    {['CSV', 'EXCEL', 'PDF'].map(format => (
                         <div key={format} className="checkbox-group">
                             <input
                                 type="checkbox"

@@ -59,7 +59,6 @@ public class ExportService {
         // Export to requested formats
         for (ExportRequest.ExportFormat format : request.getFormats()) {
             String filePath = switch (format) {
-                case JSON -> exportToJson(exportData, exportDir);
                 case CSV -> exportToCsv(exportData, exportDir);
                 case EXCEL -> exportToExcel(exportData, exportDir);
                 case PDF -> exportToPdf(exportData, exportDir);
@@ -136,59 +135,64 @@ public class ExportService {
     }
 
     private String exportToCsv(ExportData data, Path exportDir) throws IOException {
-        // Export pages to CSV
+        // Export page details to CSV (same structure as Excel)
         if (data.pages != null && !data.pages.isEmpty()) {
-            Path pagesFile = exportDir.resolve("pages.csv");
-            try (CSVWriter writer = new CSVWriter(new FileWriter(pagesFile.toFile()))) {
+            Path csvFile = exportDir.resolve("page_details.csv");
+            try (CSVWriter writer = new CSVWriter(new FileWriter(csvFile.toFile()))) {
                 // Header
-                writer.writeNext(new String[]{"ID", "URL", "Parent URL", "Depth", "Status Code", "Title", "Visited At"});
+                writer.writeNext(new String[]{"#", "Page URL", "Child Pages (Internal Links)", "External URLs", "Downloaded Files"});
 
-                // Data
+                int pageNumber = 0;
+                // For each page, find related data
                 for (Page page : data.pages) {
-                    writer.writeNext(new String[]{
-                            String.valueOf(page.getId()),
-                            page.getUrl(),
-                            page.getParentUrl(),
-                            String.valueOf(page.getDepthLevel()),
-                            String.valueOf(page.getStatusCode()),
-                            page.getTitle(),
-                            page.getVisitedAt().toString()
-                    });
-                }
-            }
-        }
+                    pageNumber++;
+                    String pageUrl = page.getUrl() != null ? page.getUrl() : "";
 
-        // Export extracted data to CSV
-        if (data.extractedData != null && !data.extractedData.isEmpty()) {
-            Path extractedFile = exportDir.resolve("extracted_data.csv");
-            try (CSVWriter writer = new CSVWriter(new FileWriter(extractedFile.toFile()))) {
-                writer.writeNext(new String[]{"ID", "Page ID", "Rule ID", "Value", "Extracted At"});
+                    // Use the structured fields that were already populated
+                    List<String> childPages = new ArrayList<>();
+                    if (page.getChildPages() != null) {
+                        for (Page.ChildPage cp : page.getChildPages()) {
+                            childPages.add(cp.getPageUrl());
+                        }
+                    }
 
-                for (ExtractedData ed : data.extractedData) {
-                    writer.writeNext(new String[]{
-                            String.valueOf(ed.getId()),
-                            String.valueOf(ed.getPageId()),
-                            String.valueOf(ed.getRuleId()),
-                            ed.getExtractedValue(),
-                            ed.getExtractedAt().toString()
-                    });
-                }
-            }
-        }
+                    List<String> externalUrls = new ArrayList<>();
+                    if (page.getUrls() != null) {
+                        for (Page.ExternalUrlInfo url : page.getUrls()) {
+                            externalUrls.add(url.getUrl());
+                        }
+                    }
 
-        // Export flows to CSV
-        if (data.flows != null && !data.flows.isEmpty()) {
-            Path flowsFile = exportDir.resolve("flows.csv");
-            try (CSVWriter writer = new CSVWriter(new FileWriter(flowsFile.toFile()))) {
-                writer.writeNext(new String[]{"ID", "Depth", "Flow Path", "Discovered At"});
+                    List<String> downloadedFiles = new ArrayList<>();
+                    if (page.getDownloads() != null) {
+                        for (Page.DownloadInfo download : page.getDownloads()) {
+                            downloadedFiles.add(download.getDownload());
+                        }
+                    }
 
-                for (NavigationFlow flow : data.flows) {
-                    writer.writeNext(new String[]{
-                            String.valueOf(flow.getId()),
-                            String.valueOf(flow.getDepth()),
-                            String.join(" → ", flow.getFlowPath()),
-                            flow.getDiscoveredAt().toString()
-                    });
+                    // Find the maximum count to determine how many rows we need for this page
+                    int maxCount = Math.max(Math.max(childPages.size(), externalUrls.size()), downloadedFiles.size());
+
+                    // If no related data, still create one row for the page
+                    if (maxCount == 0) {
+                        writer.writeNext(new String[]{String.valueOf(pageNumber), pageUrl, "", "", ""});
+                    } else {
+                        // Create multiple rows, one for each item
+                        for (int i = 0; i < maxCount; i++) {
+                            writer.writeNext(new String[]{
+                                    String.valueOf(pageNumber),
+                                    pageUrl,
+                                    i < childPages.size() ? childPages.get(i) : "",
+                                    i < externalUrls.size() ? externalUrls.get(i) : "",
+                                    i < downloadedFiles.size() ? downloadedFiles.get(i) : ""
+                            });
+                        }
+                    }
+
+                    // Add empty separator row between pages
+                    if (pageNumber < data.pages.size()) {
+                        writer.writeNext(new String[]{"", "", "", "", ""});
+                    }
                 }
             }
         }
@@ -201,36 +205,10 @@ public class ExportService {
         Path excelFile = exportDir.resolve("export.xlsx");
 
         try (Workbook workbook = new XSSFWorkbook()) {
-            // Session info sheet
-            Sheet sessionSheet = workbook.createSheet("Session Info");
-            createSessionInfoSheet(sessionSheet, data.session);
-
-            // Pages sheet
+            // Only create Page Details sheet
             if (data.pages != null && !data.pages.isEmpty()) {
-                Sheet pagesSheet = workbook.createSheet("Pages");
-                createPagesSheet(pagesSheet, data.pages);
-
-                // Page Details sheet - shows child pages, external URLs, and files for each page
                 Sheet pageDetailsSheet = workbook.createSheet("Page Details");
-                createPageDetailsSheet(pageDetailsSheet, data);
-            }
-
-            // Flows sheet
-            if (data.flows != null && !data.flows.isEmpty()) {
-                Sheet flowsSheet = workbook.createSheet("Flows");
-                createFlowsSheet(flowsSheet, data.flows);
-            }
-
-            // Extracted data sheet
-            if (data.extractedData != null && !data.extractedData.isEmpty()) {
-                Sheet extractedSheet = workbook.createSheet("Extracted Data");
-                createExtractedDataSheet(extractedSheet, data.extractedData);
-            }
-
-            // Downloaded files sheet
-            if (data.downloadedFiles != null && !data.downloadedFiles.isEmpty()) {
-                Sheet filesSheet = workbook.createSheet("Downloaded Files");
-                createDownloadedFilesSheet(filesSheet, data.downloadedFiles);
+                createPageDetailsSheetWithMerging(pageDetailsSheet, data, workbook);
             }
 
             try (FileOutputStream fos = new FileOutputStream(excelFile.toFile())) {
@@ -243,35 +221,89 @@ public class ExportService {
     }
 
     private String exportToPdf(ExportData data, Path exportDir) throws IOException {
-        Path pdfFile = exportDir.resolve("export.pdf");
+        Path pdfFile = exportDir.resolve("page_details.pdf");
 
         try (PDDocument document = new PDDocument()) {
             PDPage page = new PDPage();
             document.addPage(page);
 
-            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
-                contentStream.beginText();
-                contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 16);
-                contentStream.newLineAtOffset(50, 750);
-                contentStream.showText("JCrawler Export Report");
-                contentStream.endText();
+            PDPageContentStream contentStream = new PDPageContentStream(document, page);
 
-                contentStream.beginText();
-                contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
-                contentStream.newLineAtOffset(50, 720);
-                contentStream.showText("Session ID: " + data.session.getId());
-                contentStream.newLineAtOffset(0, -20);
-                contentStream.showText("Start URL: " + data.session.getStartUrl());
-                contentStream.newLineAtOffset(0, -20);
-                contentStream.showText("Status: " + data.session.getStatus());
-                contentStream.newLineAtOffset(0, -20);
-                contentStream.showText("Total Pages: " + data.session.getTotalPages());
-                contentStream.newLineAtOffset(0, -20);
-                contentStream.showText("Total Flows: " + data.session.getTotalFlows());
-                contentStream.newLineAtOffset(0, -20);
-                contentStream.showText("Total Extracted: " + data.session.getTotalExtracted());
-                contentStream.endText();
+            contentStream.beginText();
+            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
+            contentStream.newLineAtOffset(50, 750);
+            contentStream.showText("Page Details Export");
+            contentStream.endText();
+
+            contentStream.beginText();
+            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
+            contentStream.newLineAtOffset(50, 720);
+
+            int yPosition = 720;
+            int pageNumber = 0;
+
+            if (data.pages != null && !data.pages.isEmpty()) {
+                for (Page pg : data.pages) {
+                    pageNumber++;
+
+                    if (yPosition < 100) {
+                        // Add new page if running out of space
+                        contentStream.endText();
+                        contentStream.close();
+
+                        PDPage newPage = new PDPage();
+                        document.addPage(newPage);
+
+                        contentStream = new PDPageContentStream(document, newPage);
+                        contentStream.beginText();
+                        contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
+                        contentStream.newLineAtOffset(50, 750);
+                        yPosition = 750;
+                    }
+
+                    String pageUrl = pg.getUrl() != null ? pg.getUrl() : "";
+                    contentStream.showText("#" + pageNumber + " - Page: " + (pageUrl.length() > 65 ? pageUrl.substring(0, 65) + "..." : pageUrl));
+                    contentStream.newLineAtOffset(0, -15);
+                    yPosition -= 15;
+
+                    if (pg.getChildPages() != null && !pg.getChildPages().isEmpty()) {
+                        contentStream.showText("  Child Pages: " + pg.getChildPages().size());
+                        contentStream.newLineAtOffset(0, -15);
+                        yPosition -= 15;
+                    }
+
+                    if (pg.getUrls() != null && !pg.getUrls().isEmpty()) {
+                        contentStream.showText("  External URLs: " + pg.getUrls().size());
+                        contentStream.newLineAtOffset(0, -15);
+                        yPosition -= 15;
+                    }
+
+                    if (pg.getDownloads() != null && !pg.getDownloads().isEmpty()) {
+                        contentStream.showText("  Downloaded Files: " + pg.getDownloads().size());
+                        contentStream.newLineAtOffset(0, -15);
+                        yPosition -= 15;
+                    }
+
+                    // Draw horizontal line between page groups
+                    if (pageNumber < data.pages.size()) {
+                        contentStream.endText();
+                        contentStream.setLineWidth(2f);
+                        contentStream.moveTo(50, yPosition - 5);
+                        contentStream.lineTo(550, yPosition - 5);
+                        contentStream.stroke();
+                        contentStream.beginText();
+                        contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
+                        contentStream.newLineAtOffset(50, yPosition - 20);
+                        yPosition -= 20;
+                    } else {
+                        contentStream.newLineAtOffset(0, -10);
+                        yPosition -= 10;
+                    }
+                }
             }
+
+            contentStream.endText();
+            contentStream.close();
 
             document.save(pdfFile.toFile());
         }
@@ -434,6 +466,116 @@ public class ExportService {
 
         // Auto-size columns
         for (int i = 0; i < 4; i++) {
+            sheet.setColumnWidth(i, 8000);
+        }
+    }
+
+    private void createPageDetailsSheetWithMerging(Sheet sheet, ExportData data, Workbook workbook) {
+        int rowNum = 0;
+
+        // Header
+        Row headerRow = sheet.createRow(rowNum++);
+        headerRow.createCell(0).setCellValue("#");
+        headerRow.createCell(1).setCellValue("Page URL");
+        headerRow.createCell(2).setCellValue("Child Pages (Internal Links)");
+        headerRow.createCell(3).setCellValue("External URLs");
+        headerRow.createCell(4).setCellValue("Downloaded Files");
+
+        // Create styles
+        CellStyle centerStyle = workbook.createCellStyle();
+        centerStyle.setAlignment(HorizontalAlignment.CENTER);
+        centerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        CellStyle thickBottomBorder = workbook.createCellStyle();
+        thickBottomBorder.setBorderBottom(BorderStyle.THICK);
+
+        int pageNumber = 0;
+        // For each page, find related data
+        for (Page page : data.pages) {
+            pageNumber++;
+            String pageUrl = page.getUrl() != null ? page.getUrl() : "";
+
+            // Use the structured fields that were already populated
+            List<String> childPages = new ArrayList<>();
+            if (page.getChildPages() != null) {
+                for (Page.ChildPage cp : page.getChildPages()) {
+                    childPages.add(cp.getPageUrl());
+                }
+            }
+
+            List<String> externalUrls = new ArrayList<>();
+            if (page.getUrls() != null) {
+                for (Page.ExternalUrlInfo url : page.getUrls()) {
+                    externalUrls.add(url.getUrl());
+                }
+            }
+
+            List<String> downloadedFiles = new ArrayList<>();
+            if (page.getDownloads() != null) {
+                for (Page.DownloadInfo download : page.getDownloads()) {
+                    downloadedFiles.add(download.getDownload());
+                }
+            }
+
+            // Find the maximum count to determine how many rows we need for this page
+            int maxCount = Math.max(Math.max(childPages.size(), externalUrls.size()), downloadedFiles.size());
+
+            int startRow = rowNum;
+
+            // If no related data, still create one row for the page
+            if (maxCount == 0) {
+                Row row = sheet.createRow(rowNum++);
+                Cell numCell = row.createCell(0);
+                numCell.setCellValue(pageNumber);
+                numCell.setCellStyle(centerStyle);
+                row.createCell(1).setCellValue(pageUrl);
+                row.createCell(2).setCellValue("");
+                row.createCell(3).setCellValue("");
+                row.createCell(4).setCellValue("");
+            } else {
+                // Create multiple rows, one for each item
+                for (int i = 0; i < maxCount; i++) {
+                    Row row = sheet.createRow(rowNum++);
+                    Cell numCell = row.createCell(0);
+                    numCell.setCellValue(pageNumber);
+                    numCell.setCellStyle(centerStyle);
+                    row.createCell(1).setCellValue(pageUrl);
+                    row.createCell(2).setCellValue(i < childPages.size() ? childPages.get(i) : "");
+                    row.createCell(3).setCellValue(i < externalUrls.size() ? externalUrls.get(i) : "");
+                    row.createCell(4).setCellValue(i < downloadedFiles.size() ? downloadedFiles.get(i) : "");
+                }
+
+                // Merge cells in first two columns if multiple rows were created for this page
+                if (maxCount > 1) {
+                    // Merge # column
+                    sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                            startRow, rowNum - 1, 0, 0
+                    ));
+                    // Merge Page URL column
+                    sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                            startRow, rowNum - 1, 1, 1
+                    ));
+                }
+            }
+
+            // Add thick bottom border to last row of this page group
+            Row lastRow = sheet.getRow(rowNum - 1);
+            if (lastRow != null && pageNumber < data.pages.size()) {
+                for (int colIdx = 0; colIdx < 5; colIdx++) {
+                    Cell cell = lastRow.getCell(colIdx);
+                    if (cell != null) {
+                        CellStyle newStyle = workbook.createCellStyle();
+                        newStyle.cloneStyleFrom(cell.getCellStyle());
+                        newStyle.setBorderBottom(BorderStyle.THICK);
+                        cell.setCellStyle(newStyle);
+                    }
+                }
+            }
+        }
+
+        // Auto-size columns
+        sheet.setColumnWidth(0, 2000);  // # column narrower
+        for (int i = 1; i < 5; i++) {
             sheet.setColumnWidth(i, 8000);
         }
     }

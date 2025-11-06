@@ -132,14 +132,39 @@ public class CrawlerService {
 
             @Override
             public void onAttachmentFound(String url, Long pageId) {
-                if (request.getDownloadFiles()) {
-                    downloadService.downloadFile(url, sessionId, pageId);
+                try {
+                    // Extract filename and extension from URL
+                    String fileName = url.substring(url.lastIndexOf('/') + 1);
+                    String fileExtension = "";
+                    if (fileName.contains(".")) {
+                        fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+                    }
+
+                    // Save file URL reference without downloading
+                    DownloadedFile downloadedFile = DownloadedFile.builder()
+                            .sessionId(sessionId)
+                            .pageId(pageId)
+                            .url(url)
+                            .fileName(fileName)
+                            .fileExtension(fileExtension)
+                            .downloadedAt(LocalDateTime.now())
+                            .downloadSuccess(true)
+                            .build();
+                    downloadedFileRepository.save(downloadedFile);
+
+                    // Update session total downloaded
+                    CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
+                    if (s != null) {
+                        s.setTotalDownloaded(s.getTotalDownloaded() + 1);
+                        sessionRepository.save(s);
+                    }
+                } catch (Exception e) {
+                    log.error("Error saving file reference: {}", e.getMessage());
                 }
             }
 
             @Override
             public void onExternalUrlFound(String url, String foundOnPage) {
-                System.out.println("DEBUG: CrawlerService.onExternalUrlFound called with: " + url);
                 try {
                     ExternalUrl externalUrl = ExternalUrl.builder()
                             .sessionId(sessionId)
@@ -149,23 +174,19 @@ public class CrawlerService {
                             .domain(linkExtractor.extractDomain(url))
                             .build();
                     externalUrlRepository.save(externalUrl);
-                    System.out.println("DEBUG: Saved external URL to database");
 
                     // Update session total external URLs
                     CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                     if (s != null) {
                         s.setTotalExternalUrls(s.getTotalExternalUrls() + 1);
                         sessionRepository.save(s);
-                        System.out.println("DEBUG: Updated session totalExternalUrls to: " + s.getTotalExternalUrls());
 
                         // Send WebSocket update
                         ProgressUpdate update = ProgressUpdate.externalUrlFound(sessionId, url, s.getTotalExternalUrls());
                         messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
-                        System.out.println("DEBUG: Sent WebSocket message for external URL");
                     }
                 } catch (Exception e) {
-                    System.out.println("DEBUG: ERROR in onExternalUrlFound: " + e.getMessage());
-                    e.printStackTrace();
+                    log.error("Error saving external URL: {}", e.getMessage());
                 }
             }
 

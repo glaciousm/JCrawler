@@ -30,10 +30,10 @@ public class DownloadedFile {
     @Column(nullable = false, length = 2048)
     private String url;
 
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = true, length = 1000)
     private String localPath;
 
-    @Column(nullable = false, length = 500)
+    @Column(nullable = true, length = 500)
     private String fileName;
 
     private Long fileSize;

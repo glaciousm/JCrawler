@@ -33,7 +33,6 @@ public class ExportRequest {
     private Boolean includeDownloadedFiles = true;
 
     public enum ExportFormat {
-        JSON,
         CSV,
         EXCEL,
         PDF
