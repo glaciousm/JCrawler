@@ -47,8 +47,7 @@ jpackage --type app-image ^
          --main-jar jcrawler-1.0.0.jar ^
          --main-class com.jcrawler.JCrawlerApplication ^
          --dest target\installer ^
-         --app-version 1.0.0 ^
-         --java-options "--add-modules javafx.controls,javafx.fxml,javafx.web"
+         --app-version 1.0.0
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
