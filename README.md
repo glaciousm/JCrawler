@@ -1,6 +1,6 @@
 # JCrawler - Web Crawler with Flow Detection
 
-A powerful Java Spring Boot web crawler with Electron frontend for crawling websites, tracking navigation flows, extracting data, and exporting results in multiple formats.
+A powerful standalone JavaFX desktop application for crawling websites, tracking navigation flows, extracting data, and exporting results in multiple formats. Built with Spring Boot and JavaFX for true portability.
 
 ## Features
 
@@ -10,26 +10,30 @@ A powerful Java Spring Boot web crawler with Electron frontend for crawling webs
 - **User-defined extraction rules** using CSS/XPath selectors
 - **Multi-format export** (JSON, CSV, Excel, PDF)
 - **File downloads** with configurable file extensions
-- **Real-time progress tracking** via WebSocket
+- **Desktop GUI** with intuitive tabbed interface
 - **Concurrent crawling** with configurable thread pool
 - **Optional authentication** (form-based login)
-- **Live metrics** (pages/sec, active threads, queue size)
+- **Session management** with detailed statistics
+- **JavaScript rendering** support via Playwright
+- **Single executable JAR** - truly portable
 
 ## Tech Stack
 
-**Backend:**
-- Spring Boot 3.2.0
+**Core Framework:**
+- Spring Boot 3.2.0 (headless mode, no web server)
 - Spring Data JPA with H2 Database
-- Spring WebSocket (STOMP)
-- JSoup for HTML parsing
-- OkHttp for HTTP requests
-- Apache POI (Excel), PDFBox (PDF), OpenCSV (CSV)
+- JavaFX 21.0.1 for desktop UI
 
-**Frontend (Planned):**
-- Electron
-- React/Vue
-- WebSocket client (SockJS + STOMP)
-- D3.js/Cytoscape.js for flow visualization
+**Crawler & Processing:**
+- JSoup for HTML parsing
+- Playwright for JavaScript rendering
+- OkHttp for HTTP requests
+
+**Export & Formats:**
+- Apache POI (Excel)
+- PDFBox (PDF)
+- OpenCSV (CSV)
+- Jackson (JSON)
 
 ## Getting Started
 

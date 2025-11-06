@@ -9,7 +9,6 @@ import com.jcrawler.model.*;
 import com.jcrawler.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +33,6 @@ public class CrawlerService {
     private final LinkExtractor linkExtractor;
     private final ExtractionService extractionService;
     private final DownloadService downloadService;
-    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public CrawlResponse startCrawl(CrawlRequest request) {
@@ -125,9 +123,7 @@ public class CrawlerService {
                     sessionRepository.save(s);
                 }
 
-                // Send WebSocket update
-                ProgressUpdate update = ProgressUpdate.flowDiscovered(sessionId, flow.getId(), flowPath, s.getTotalFlows());
-                messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
+                // Note: WebSocket updates removed for JavaFX desktop app
             }
 
             @Override
@@ -158,9 +154,7 @@ public class CrawlerService {
                         s.setTotalDownloaded(s.getTotalDownloaded() + 1);
                         sessionRepository.save(s);
 
-                        // Send WebSocket update
-                        ProgressUpdate update = ProgressUpdate.fileDownloaded(sessionId, fileName, 0L, s.getTotalDownloaded());
-                        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
+                        // Note: WebSocket updates removed for JavaFX desktop app
                     }
                 } catch (Exception e) {
                     log.error("Error saving file reference: {}", e.getMessage());
@@ -185,9 +179,7 @@ public class CrawlerService {
                         s.setTotalExternalUrls(s.getTotalExternalUrls() + 1);
                         sessionRepository.save(s);
 
-                        // Send WebSocket update
-                        ProgressUpdate update = ProgressUpdate.externalUrlFound(sessionId, url, s.getTotalExternalUrls());
-                        messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
+                        // Note: WebSocket updates removed for JavaFX desktop app
                     }
                 } catch (Exception e) {
                     log.error("Error saving external URL: {}", e.getMessage());
@@ -221,14 +213,7 @@ public class CrawlerService {
 
                     log.info("Crawl completed for session: {}", sessionId);
 
-                    // Send completion update
-                    ProgressUpdate update = ProgressUpdate.builder()
-                            .type(ProgressUpdate.ProgressType.CRAWL_COMPLETED)
-                            .sessionId(sessionId)
-                            .timestamp(LocalDateTime.now())
-                            .data(Map.of("message", "Crawl completed successfully"))
-                            .build();
-                    messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
+                    // Note: WebSocket updates removed for JavaFX desktop app
                 }
             }
 
@@ -242,14 +227,7 @@ public class CrawlerService {
                     sessionRepository.save(s);
                 }
 
-                // Send error update
-                ProgressUpdate update = ProgressUpdate.builder()
-                        .type(ProgressUpdate.ProgressType.CRAWL_ERROR)
-                        .sessionId(sessionId)
-                        .timestamp(LocalDateTime.now())
-                        .data(Map.of("error", e.getMessage()))
-                        .build();
-                messagingTemplate.convertAndSend("/topic/crawler/" + sessionId + "/progress", update);
+                // Note: WebSocket updates removed for JavaFX desktop app
             }
         });
 
