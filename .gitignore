@@ -1,0 +1,76 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE Files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# JCrawler specific
+data/
+downloads/
+exports/
+
+# H2 Database
+*.db
+*.trace.db
+*.lock.db
+
+# Logs
+logs/
+
+# Node/NPM
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+frontend/build/
+frontend/dist/
+
+# Test files
+test-*.json
+*.txt
+
+# Temporary files
+nul
+
+# Claude files
+.claude/
+claude.md
+GETTING_STARTED.md
+PROJECT_SUMMARY.md
