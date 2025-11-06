@@ -7,13 +7,17 @@ echo.
 
 REM Clean target directory (avoid Maven clean StackOverflowError on Windows)
 echo [1/4] Cleaning target directory...
-if exist target (
-    echo Removing old build files...
-    rmdir /s /q target 2>nul
-    if exist target (
-        echo Warning: Could not fully clean target directory, trying alternate method...
-        rd /s /q target 2>nul
-    )
+if exist target\installer (
+    echo Removing old installer directory...
+    rmdir /s /q target\installer 2>nul
+)
+if exist target\jpackage-input (
+    echo Removing old jpackage-input directory...
+    rmdir /s /q target\jpackage-input 2>nul
+)
+if exist target\*.jar (
+    echo Removing old JAR files...
+    del /q target\*.jar 2>nul
 )
 
 REM Build JAR (without clean to avoid path length issues)
@@ -36,6 +40,7 @@ copy target\jcrawler-1.0.0.jar target\jpackage-input\
 REM Create native executable
 echo.
 echo [4/4] Creating native executable...
+if exist target\installer\JCrawler rmdir /s /q target\installer\JCrawler
 jpackage --type app-image ^
          --input target\jpackage-input ^
          --name JCrawler ^
