@@ -159,6 +159,9 @@ public class CrawlerEngine {
         if (result.success && result.document != null) {
             // Extract links
             Set<String> links = linkExtractor.extractLinks(result.document, urlPair.url, session.getBaseDomain());
+            log.info("Extracted {} internal links from {}", links.size(), urlPair.url);
+
+            int newLinksAdded = 0;
             for (String link : links) {
                 // Track ALL discovered internal links (but exclude file URLs)
                 if (!isFileUrl(link)) {
@@ -167,6 +170,8 @@ public class CrawlerEngine {
 
                 if (!context.visitedUrls.contains(link)) {
                     context.toVisit.add(new UrlDepthPair(link, urlPair.depth + 1, urlPair.url));
+                    newLinksAdded++;
+                    log.debug("Added new link to queue: {} (depth: {})", link, urlPair.depth + 1);
 
                     // Track flow
                     List<String> flowPath = new ArrayList<>();
@@ -179,6 +184,9 @@ public class CrawlerEngine {
                     callback.onFlowDiscovered(flowPath, urlPair.depth + 1);
                 }
             }
+
+            log.info("Added {} new links to crawl queue. Queue size: {}", newLinksAdded, context.toVisit.size());
+        }
 
             // Extract attachment URLs
             Set<String> attachments = linkExtractor.extractAttachmentUrls(

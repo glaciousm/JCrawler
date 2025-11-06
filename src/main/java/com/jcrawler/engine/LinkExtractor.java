@@ -23,7 +23,7 @@ public class LinkExtractor {
 
         System.out.println("=== LINK EXTRACTION DEBUG ===");
         System.out.println("Base URL: " + baseUrl);
-        System.out.println("Base Domain: " + baseDomain);
+        System.out.println("Base Domain: " + baseDomain + " (normalized: " + normalizeHost(baseDomain) + ")");
         System.out.println("Total anchor elements: " + anchorElements.size());
 
         for (Element element : anchorElements) {
@@ -35,8 +35,12 @@ public class LinkExtractor {
             String normalizedUrl = normalizeUrl(href, baseUrl);
             boolean sameDomain = normalizedUrl != null && isSameDomain(normalizedUrl, baseDomain);
 
+            // Extract domain from the link for debugging
+            String linkDomain = normalizedUrl != null ? extractDomain(normalizedUrl) : "null";
+
             System.out.println("  Link: " + href);
             System.out.println("    Normalized: " + normalizedUrl);
+            System.out.println("    Link domain: " + linkDomain);
             System.out.println("    Same domain: " + sameDomain);
 
             if (sameDomain) {
@@ -119,10 +123,20 @@ public class LinkExtractor {
     public boolean isSameDomain(String url, String baseDomain) {
         try {
             URL urlObj = new URL(url);
-            return urlObj.getHost().equals(baseDomain);
+            String urlHost = normalizeHost(urlObj.getHost());
+            String normalizedBaseDomain = normalizeHost(baseDomain);
+            return urlHost.equals(normalizedBaseDomain);
         } catch (MalformedURLException e) {
             return false;
         }
+    }
+
+    private String normalizeHost(String host) {
+        // Remove www. prefix for comparison to handle www/non-www variations
+        if (host != null && host.startsWith("www.")) {
+            return host.substring(4);
+        }
+        return host;
     }
 
     public boolean isAttachment(String url, List<String> allowedExtensions) {
@@ -141,7 +155,7 @@ public class LinkExtractor {
     public String extractDomain(String url) {
         try {
             URL urlObj = new URL(url);
-            return urlObj.getHost();
+            return normalizeHost(urlObj.getHost());
         } catch (MalformedURLException e) {
             return null;
         }
