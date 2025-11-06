@@ -235,6 +235,11 @@ public class CrawlerService {
                     log.error("Error marking session as failed: {}", sessionId, ex);
                 }
             }
+
+            @Override
+            public void onLog(String message) {
+                logToUI(message);
+            }
         });
 
         return buildCrawlResponse(session);

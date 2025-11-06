@@ -150,16 +150,20 @@ public class JavaScriptPageProcessor {
                     result.statusCode = 200;
 
                     int linkCount = result.document.select("a[href]").size();
-                    log.info("Fetched {} with WebView: {} anchor tags with href found", url, linkCount);
+                    log.info("✅ WebView rendered page successfully!");
+                    log.info("   HTML length: {} chars", html.length());
+                    log.info("   Found {} <a> tags with href attribute", linkCount);
 
                     // Log first few links for debugging
                     if (linkCount > 0) {
                         var links = result.document.select("a[href]");
-                        log.info("Sample links found:");
-                        for (int i = 0; i < Math.min(5, linkCount); i++) {
+                        log.info("   Sample links:");
+                        for (int i = 0; i < Math.min(3, linkCount); i++) {
                             var link = links.get(i);
-                            log.info("  - href: {} (abs: {})", link.attr("href"), link.attr("abs:href"));
+                            log.info("     - {}", link.attr("abs:href"));
                         }
+                    } else {
+                        log.warn("   ⚠️ NO LINKS FOUND! The page might not have rendered properly or has no links.");
                     }
                 } else {
                     result.success = false;

@@ -129,6 +129,8 @@ public class CrawlerEngine {
     private void processSinglePage(CrawlContext context, UrlDepthPair urlPair, CrawlCallback callback) {
         CrawlSession session = context.session;
 
+        callback.onLog("⏳ Fetching: " + urlPair.url + " (depth: " + urlPair.depth + ")");
+
         // Choose between static HTML or JavaScript rendering
         PageProcessor.PageResult result;
         if (session.getEnableJavaScript()) {
@@ -152,7 +154,12 @@ public class CrawlerEngine {
         }
 
         if (!result.success) {
+            callback.onLog("❌ Failed to fetch: " + result.errorMessage);
             log.warn("❌ Failed to fetch {}: {}", urlPair.url, result.errorMessage);
+        } else {
+            // Log what we got from the page
+            int anchorCount = result.document != null ? result.document.select("a[href]").size() : 0;
+            callback.onLog("✅ Page loaded! Found " + anchorCount + " <a> tags with href");
         }
 
         // Save page
@@ -164,6 +171,8 @@ public class CrawlerEngine {
             // Extract links
             Set<String> links = linkExtractor.extractLinks(result.document, urlPair.url, session.getBaseDomain());
             log.info("Extracted {} internal links from {}", links.size(), urlPair.url);
+
+            callback.onLog("🔍 Found " + links.size() + " internal link(s) on this page");
 
             int newLinksAdded = 0;
             for (String link : links) {
@@ -189,7 +198,10 @@ public class CrawlerEngine {
                 }
             }
 
+            callback.onLog("➕ Added " + newLinksAdded + " new link(s) to queue. Queue size: " + context.toVisit.size());
             log.info("Added {} new links to crawl queue. Queue size: {}", newLinksAdded, context.toVisit.size());
+        } else {
+            callback.onLog("⚠️ Could not extract links (failed to fetch or parse HTML)");
         }
 
             // Extract attachment URLs
@@ -301,5 +313,6 @@ public class CrawlerEngine {
         void onInternalLinkFound(String url, String foundOnPage);
         void onComplete();
         void onError(Exception e);
+        void onLog(String message); // For UI logging
     }
 }
