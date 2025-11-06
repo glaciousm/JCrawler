@@ -1,5 +1,6 @@
 package com.jcrawler.engine;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -10,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@Slf4j
 public class LinkExtractor {
 
     private static final List<String> ATTACHMENT_EXTENSIONS = List.of(
@@ -21,10 +23,10 @@ public class LinkExtractor {
         Set<String> links = new HashSet<>();
         Elements anchorElements = document.select("a[href]");
 
-        System.out.println("=== LINK EXTRACTION DEBUG ===");
-        System.out.println("Base URL: " + baseUrl);
-        System.out.println("Base Domain: " + baseDomain + " (normalized: " + normalizeHost(baseDomain) + ")");
-        System.out.println("Total anchor elements: " + anchorElements.size());
+        log.info("=== LINK EXTRACTION ===");
+        log.info("Base URL: {}", baseUrl);
+        log.info("Base Domain: {} (normalized: {})", baseDomain, normalizeHost(baseDomain));
+        log.info("Total <a> tags with href: {}", anchorElements.size());
 
         for (Element element : anchorElements) {
             String href = element.attr("abs:href");
@@ -38,18 +40,18 @@ public class LinkExtractor {
             // Extract domain from the link for debugging
             String linkDomain = normalizedUrl != null ? extractDomain(normalizedUrl) : "null";
 
-            System.out.println("  Link: " + href);
-            System.out.println("    Normalized: " + normalizedUrl);
-            System.out.println("    Link domain: " + linkDomain);
-            System.out.println("    Same domain: " + sameDomain);
+            if (anchorElements.size() <= 10) { // Only log details if few links
+                log.info("  Link: {} -> normalized: {} (domain: {}) [same domain: {}]",
+                    href, normalizedUrl, linkDomain, sameDomain);
+            }
 
             if (sameDomain) {
                 links.add(normalizedUrl);
             }
         }
 
-        System.out.println("Total internal links found: " + links.size());
-        System.out.println("===========================");
+        log.info("✅ Found {} internal links to crawl", links.size());
+        log.info("=======================");
         return links;
     }
 
@@ -57,8 +59,7 @@ public class LinkExtractor {
         Set<String> externalUrls = new HashSet<>();
         Elements anchorElements = document.select("a[href]");
 
-        System.out.println("=== EXTRACTING EXTERNAL URLs ===");
-        System.out.println("Base domain: " + baseDomain);
+        log.debug("Extracting external URLs from {}", baseUrl);
 
         for (Element element : anchorElements) {
             String href = element.attr("abs:href");
@@ -70,12 +71,10 @@ public class LinkExtractor {
             // Collect URLs that are NOT on the same domain (external links)
             if (normalizedUrl != null && !isSameDomain(normalizedUrl, baseDomain)) {
                 externalUrls.add(normalizedUrl);
-                System.out.println("  EXTERNAL: " + normalizedUrl);
             }
         }
 
-        System.out.println("Total external URLs found: " + externalUrls.size());
-        System.out.println("================================");
+        log.info("Found {} external URLs", externalUrls.size());
 
         return externalUrls;
     }

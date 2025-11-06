@@ -132,7 +132,7 @@ public class CrawlerEngine {
         // Choose between static HTML or JavaScript rendering
         PageProcessor.PageResult result;
         if (session.getEnableJavaScript()) {
-            log.debug("Using JavaScript processor for URL: {}", urlPair.url);
+            log.info("⏳ Fetching with JavaScript: {}", urlPair.url);
             result = jsPageProcessor.fetchAndParse(
                     urlPair.url,
                     session.getSessionCookies(),
@@ -141,7 +141,7 @@ public class CrawlerEngine {
                     urlPair.depth
             );
         } else {
-            log.debug("Using static HTML processor for URL: {}", urlPair.url);
+            log.info("⏳ Fetching static HTML: {}", urlPair.url);
             result = pageProcessor.fetchAndParse(
                     urlPair.url,
                     session.getSessionCookies(),
@@ -149,6 +149,10 @@ public class CrawlerEngine {
                     urlPair.parentUrl,
                     urlPair.depth
             );
+        }
+
+        if (!result.success) {
+            log.warn("❌ Failed to fetch {}: {}", urlPair.url, result.errorMessage);
         }
 
         // Save page

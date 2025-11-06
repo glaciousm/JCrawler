@@ -174,6 +174,13 @@ public class CrawlerTab {
                 .downloadFiles(downloadFilesCheckBox.isSelected())
                 .build();
 
+        // Set up UI callback for real-time logging
+        crawlerService.setUICallback(message -> {
+            Platform.runLater(() -> {
+                logArea.appendText(message + "\n");
+            });
+        });
+
         // Start crawl in background thread
         new Thread(() -> {
             try {

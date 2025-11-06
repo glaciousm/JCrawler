@@ -46,9 +46,27 @@ public class CrawlerService {
         this.downloadService = downloadService;
     }
 
+    // UI callback interface for real-time updates
+    public interface UICallback {
+        void onLog(String message);
+    }
+
+    private UICallback uiCallback;
+
+    public void setUICallback(UICallback callback) {
+        this.uiCallback = callback;
+    }
+
+    private void logToUI(String message) {
+        if (uiCallback != null) {
+            uiCallback.onLog(message);
+        }
+        log.info(message);
+    }
+
     public CrawlResponse startCrawl(CrawlRequest request) {
-        log.info("Starting crawl for URL: {}", request.getStartUrl());
-        log.info("JavaScript rendering enabled: {}", request.getEnableJavaScript());
+        logToUI("Starting crawl for URL: " + request.getStartUrl());
+        logToUI("JavaScript rendering: " + (request.getEnableJavaScript() ? "ENABLED" : "DISABLED"));
 
         // Extract domain
         String baseDomain = linkExtractor.extractDomain(request.getStartUrl());
@@ -104,6 +122,7 @@ public class CrawlerService {
         crawlerEngine.startCrawl(session, new CrawlerEngine.CrawlCallback() {
             @Override
             public void onPageDiscovered(Page page) {
+                logToUI("📄 Discovered page: " + page.getUrl() + " (depth: " + page.getDepthLevel() + ")");
                 page = pageDao.save(page);
 
                 // Extract data if rules exist
@@ -161,6 +180,7 @@ public class CrawlerService {
             @Override
             public void onExternalUrlFound(String url, String foundOnPage) {
                 try {
+                    logToUI("🌐 Found external link: " + url);
                     ExternalUrl externalUrl = ExternalUrl.builder()
                             .sessionId(sessionId)
                             .url(url)
@@ -180,6 +200,7 @@ public class CrawlerService {
             @Override
             public void onInternalLinkFound(String url, String foundOnPage) {
                 try {
+                    logToUI("🔗 Found internal link: " + url);
                     InternalLink internalLink = InternalLink.builder()
                             .sessionId(sessionId)
                             .url(url)
@@ -198,7 +219,7 @@ public class CrawlerService {
                     Integer totalPages = pageDao.countBySessionId(sessionId).intValue();
                     Integer totalDownloaded = downloadedFileDao.countBySessionId(sessionId).intValue();
                     sessionDao.markCompleted(sessionId, totalPages, totalDownloaded);
-                    log.info("Crawl completed for session: {}", sessionId);
+                    logToUI("✅ Crawl completed! Total pages: " + totalPages);
                 } catch (Exception ex) {
                     log.error("Error marking session as completed: {}", sessionId, ex);
                 }
@@ -206,6 +227,7 @@ public class CrawlerService {
 
             @Override
             public void onError(Exception e) {
+                logToUI("❌ Error: " + e.getMessage());
                 log.error("Crawl error for session: {}", sessionId, e);
                 try {
                     sessionDao.markFailed(sessionId);
