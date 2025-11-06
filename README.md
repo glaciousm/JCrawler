@@ -59,20 +59,26 @@ A lightweight, portable JavaFX desktop application for crawling websites, tracki
 
 ### Quick Start
 
-**1. Build:**
-```bash
-mvn clean package
-```
-
-**2. Run:**
-```bash
-java -jar target/jcrawler-1.0.0.jar
-```
-
-**Or with JavaFX Maven Plugin:**
+**Option 1: Run with Maven (Recommended)**
 ```bash
 mvn javafx:run
 ```
+
+**Option 2: Use the launcher scripts**
+```bash
+# Windows
+run.bat
+
+# Linux/Mac
+./run.sh
+```
+
+**Option 3: Build and run JAR (requires JavaFX setup)**
+```bash
+mvn clean package
+java -jar target/jcrawler-1.0.0.jar
+```
+*Note: Option 3 requires JavaFX runtime to be installed and configured on your system.*
 
 ## Usage
 
@@ -221,16 +227,24 @@ Summary report with session statistics and page counts.
 
 ## Troubleshooting
 
+### "JavaFX runtime components are missing"
+This is the most common error when running JavaFX applications.
+
+**Solution: Use the Maven JavaFX plugin instead**
+```bash
+mvn javafx:run
+```
+
+Or use the provided launcher scripts (`run.bat` on Windows or `run.sh` on Linux/Mac).
+
+**Why?** JavaFX requires special module configuration that Maven handles automatically.
+
 ### "No suitable driver found for jdbc:h2"
 - Ensure H2 dependency is in pom.xml
 - Check Hibernate configuration
 
-### JavaFX runtime errors
-- Verify JavaFX 21+ is installed
-- Run with `mvn javafx:run` instead of `java -jar`
-
 ### Out of memory during large crawls
-- Increase JVM heap: `java -Xmx2g -jar jcrawler-1.0.0.jar`
+- Increase JVM heap: Add to run command
 - Reduce concurrent threads in crawler settings
 
 ## Contributing
