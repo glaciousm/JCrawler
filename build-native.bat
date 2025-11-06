@@ -40,12 +40,18 @@ if %ERRORLEVEL% NEQ 0 (
 echo Runtime created!
 echo.
 
-REM Step 3: Create native installer with jpackage
-echo [3/3] Creating Windows executable...
+REM Step 3: Prepare jpackage input (use shaded JAR to avoid path length issues)
+echo [3/4] Preparing jpackage input...
+if exist target\jpackage-input rmdir /s /q target\jpackage-input
+mkdir target\jpackage-input
+copy target\jcrawler-1.0.0.jar target\jpackage-input\
+
+REM Step 4: Create native installer with jpackage
+echo [4/4] Creating Windows executable...
 if exist target\installer rmdir /s /q target\installer
 
 jpackage --type app-image ^
-         --input target ^
+         --input target\jpackage-input ^
          --name JCrawler ^
          --main-jar jcrawler-1.0.0.jar ^
          --main-class com.jcrawler.JCrawlerApplication ^
