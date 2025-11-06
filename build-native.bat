@@ -7,9 +7,21 @@ echo JCrawler Native Build Script
 echo ========================================
 echo.
 
-REM Step 1: Build the application
-echo [1/4] Building application with Maven...
-call mvn clean package -DskipTests
+REM Step 1: Clean target directory (avoid Maven clean StackOverflowError on Windows)
+echo [1/5] Cleaning target directory...
+if exist target (
+    echo Removing old build files...
+    rmdir /s /q target 2>nul
+    if exist target (
+        echo Warning: Could not fully clean target directory, trying alternate method...
+        rd /s /q target 2>nul
+    )
+)
+
+REM Step 2: Build the application
+echo.
+echo [2/5] Building application with Maven...
+call mvn package -DskipTests
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Maven build failed
     pause
@@ -18,8 +30,8 @@ if %ERRORLEVEL% NEQ 0 (
 echo Build successful!
 echo.
 
-REM Step 2: Create runtime image with jlink
-echo [2/4] Creating custom runtime with jlink...
+REM Step 3: Create runtime image with jlink
+echo [3/5] Creating custom runtime with jlink...
 if exist target\runtime rmdir /s /q target\runtime
 
 jlink --add-modules java.base,java.desktop,java.sql,java.naming,java.management,java.instrument,java.xml,jdk.unsupported,javafx.controls,javafx.fxml,javafx.graphics,javafx.web ^
@@ -40,15 +52,15 @@ if %ERRORLEVEL% NEQ 0 (
 echo Runtime created!
 echo.
 
-REM Step 3: Prepare jpackage input (use shaded JAR to avoid path length issues)
+REM Step 4: Prepare jpackage input (use shaded JAR to avoid path length issues)
 echo.
-echo [3/4] Preparing jpackage input...
+echo [4/5] Preparing jpackage input...
 if exist target\jpackage-input rmdir /s /q target\jpackage-input
 mkdir target\jpackage-input
 copy target\jcrawler-1.0.0.jar target\jpackage-input\
 
-REM Step 4: Create native installer with jpackage
-echo [4/4] Creating Windows executable...
+REM Step 5: Create native installer with jpackage
+echo [5/5] Creating Windows executable...
 if exist target\installer rmdir /s /q target\installer
 
 jpackage --type app-image ^

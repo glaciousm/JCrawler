@@ -5,9 +5,21 @@ REM Requires: JDK 17+ with JavaFX installed
 echo Building JCrawler native executable...
 echo.
 
-REM Build JAR
-echo [1/3] Building JAR...
-call mvn clean package -DskipTests
+REM Clean target directory (avoid Maven clean StackOverflowError on Windows)
+echo [1/4] Cleaning target directory...
+if exist target (
+    echo Removing old build files...
+    rmdir /s /q target 2>nul
+    if exist target (
+        echo Warning: Could not fully clean target directory, trying alternate method...
+        rd /s /q target 2>nul
+    )
+)
+
+REM Build JAR (without clean to avoid path length issues)
+echo.
+echo [2/4] Building JAR...
+call mvn package -DskipTests
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Build failed
     pause
@@ -16,14 +28,14 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Prepare for jpackage (use shaded JAR to avoid path length issues)
 echo.
-echo [2/3] Preparing jpackage input...
+echo [3/4] Preparing jpackage input...
 if exist target\jpackage-input rmdir /s /q target\jpackage-input
 mkdir target\jpackage-input
 copy target\jcrawler-1.0.0.jar target\jpackage-input\
 
 REM Create native executable
 echo.
-echo [3/3] Creating native executable...
+echo [4/4] Creating native executable...
 jpackage --type app-image ^
          --input target\jpackage-input ^
          --name JCrawler ^
