@@ -200,12 +200,7 @@ public class CrawlerTab {
 
                 Platform.runLater(() -> {
                     statusLabel.setText("Status: Running (Session ID: " + currentSessionId + ")");
-                    logArea.appendText("Crawl started for: " + url + "\n");
-                    logArea.appendText("Session ID: " + currentSessionId + "\n");
-                    logArea.appendText("Max Depth: " + request.getMaxDepth() + " | Max Pages: " + request.getMaxPages() + "\n");
-                    logArea.appendText("JavaScript: " + (request.getEnableJavaScript() ? "Enabled" : "Disabled") + "\n");
-                    logArea.appendText("----------------------------------------\n");
-
+                    // Messages now come from the callback, not here
                     startButton.setDisable(true);
                     pauseButton.setDisable(false);
                     stopButton.setDisable(false);
