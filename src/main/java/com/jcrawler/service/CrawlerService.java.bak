@@ -1,51 +1,40 @@
 package com.jcrawler.service;
 
-import com.jcrawler.dao.*;
 import com.jcrawler.dto.CrawlRequest;
 import com.jcrawler.dto.CrawlResponse;
+import com.jcrawler.dto.ProgressUpdate;
 import com.jcrawler.engine.CrawlerEngine;
 import com.jcrawler.engine.LinkExtractor;
 import com.jcrawler.model.*;
+import com.jcrawler.repository.*;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Service
+@RequiredArgsConstructor
 @Slf4j
 public class CrawlerService {
 
-    private final CrawlSessionDao sessionDao;
-    private final PageDao pageDao;
-    private final NavigationFlowDao flowDao;
-    private final ExtractionRuleDao ruleDao;
-    private final DownloadedFileDao downloadedFileDao;
-    private final ExternalUrlDao externalUrlDao;
-    private final InternalLinkDao internalLinkDao;
+    private final CrawlSessionRepository sessionRepository;
+    private final PageRepository pageRepository;
+    private final NavigationFlowRepository flowRepository;
+    private final ExtractionRuleRepository ruleRepository;
+    private final DownloadedFileRepository downloadedFileRepository;
+    private final ExternalUrlRepository externalUrlRepository;
+    private final InternalLinkRepository internalLinkRepository;
     private final CrawlerEngine crawlerEngine;
     private final LinkExtractor linkExtractor;
     private final ExtractionService extractionService;
     private final DownloadService downloadService;
 
-    public CrawlerService(CrawlSessionDao sessionDao, PageDao pageDao, NavigationFlowDao flowDao,
-                         ExtractionRuleDao ruleDao, DownloadedFileDao downloadedFileDao,
-                         ExternalUrlDao externalUrlDao, InternalLinkDao internalLinkDao,
-                         CrawlerEngine crawlerEngine, LinkExtractor linkExtractor,
-                         ExtractionService extractionService, DownloadService downloadService) {
-        this.sessionDao = sessionDao;
-        this.pageDao = pageDao;
-        this.flowDao = flowDao;
-        this.ruleDao = ruleDao;
-        this.downloadedFileDao = downloadedFileDao;
-        this.externalUrlDao = externalUrlDao;
-        this.internalLinkDao = internalLinkDao;
-        this.crawlerEngine = crawlerEngine;
-        this.linkExtractor = linkExtractor;
-        this.extractionService = extractionService;
-        this.downloadService = downloadService;
-    }
-
+    @Transactional
     public CrawlResponse startCrawl(CrawlRequest request) {
         log.info("Starting crawl for URL: {}", request.getStartUrl());
         log.info("JavaScript rendering enabled: {}", request.getEnableJavaScript());
@@ -79,7 +68,7 @@ public class CrawlerService {
             session.setAuthConfig(authConfig);
         }
 
-        session = sessionDao.save(session);
+        session = sessionRepository.save(session);
 
         // Save extraction rules
         if (request.getExtractionRules() != null) {
@@ -92,13 +81,13 @@ public class CrawlerService {
                         .attributeToExtract(ruleDto.getAttributeToExtract())
                         .enabled(true)
                         .build();
-                ruleDao.save(rule);
+                ruleRepository.save(rule);
             }
         }
 
         // Update session status
         session.setStatus(CrawlSession.CrawlStatus.RUNNING);
-        sessionDao.save(session);
+        sessionRepository.save(session);
 
         final Long sessionId = session.getId();
 
@@ -106,10 +95,10 @@ public class CrawlerService {
         crawlerEngine.startCrawl(session, new CrawlerEngine.CrawlCallback() {
             @Override
             public void onPageDiscovered(Page page) {
-                page = pageDao.save(page);
+                page = pageRepository.save(page);
 
                 // Extract data if rules exist
-                List<ExtractionRule> rules = ruleDao.findBySessionIdAndEnabled(sessionId, true);
+                List<ExtractionRule> rules = ruleRepository.findBySessionIdAndEnabled(sessionId, true);
                 if (!rules.isEmpty()) {
                     extractionService.extractData(page, rules);
                 }
@@ -125,14 +114,16 @@ public class CrawlerService {
                         .endUrl(flowPath.get(flowPath.size() - 1))
                         .discoveredAt(LocalDateTime.now())
                         .build();
-                flow = flowDao.save(flow);
+                flow = flowRepository.save(flow);
 
                 // Update session total flows
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
+                CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                 if (s != null) {
                     s.setTotalFlows(s.getTotalFlows() + 1);
-                    sessionDao.save(s);
+                    sessionRepository.save(s);
                 }
+
+                // Note: WebSocket updates removed for JavaFX desktop app
             }
 
             @Override
@@ -155,13 +146,15 @@ public class CrawlerService {
                             .downloadedAt(LocalDateTime.now())
                             .downloadSuccess(true)
                             .build();
-                    downloadedFileDao.save(downloadedFile);
+                    downloadedFileRepository.save(downloadedFile);
 
                     // Update session total downloaded
-                    CrawlSession s = sessionDao.findById(sessionId).orElse(null);
+                    CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                     if (s != null) {
                         s.setTotalDownloaded(s.getTotalDownloaded() + 1);
-                        sessionDao.save(s);
+                        sessionRepository.save(s);
+
+                        // Note: WebSocket updates removed for JavaFX desktop app
                     }
                 } catch (Exception e) {
                     log.error("Error saving file reference: {}", e.getMessage());
@@ -178,13 +171,15 @@ public class CrawlerService {
                             .discoveredAt(LocalDateTime.now())
                             .domain(linkExtractor.extractDomain(url))
                             .build();
-                    externalUrlDao.save(externalUrl);
+                    externalUrlRepository.save(externalUrl);
 
                     // Update session total external URLs
-                    CrawlSession s = sessionDao.findById(sessionId).orElse(null);
+                    CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                     if (s != null) {
                         s.setTotalExternalUrls(s.getTotalExternalUrls() + 1);
-                        sessionDao.save(s);
+                        sessionRepository.save(s);
+
+                        // Note: WebSocket updates removed for JavaFX desktop app
                     }
                 } catch (Exception e) {
                     log.error("Error saving external URL: {}", e.getMessage());
@@ -200,7 +195,7 @@ public class CrawlerService {
                             .foundOnPage(foundOnPage)
                             .discoveredAt(LocalDateTime.now())
                             .build();
-                    internalLinkDao.save(internalLink);
+                    internalLinkRepository.save(internalLink);
                 } catch (Exception e) {
                     log.error("Error saving internal link: {}", e.getMessage());
                 }
@@ -208,69 +203,76 @@ public class CrawlerService {
 
             @Override
             public void onComplete() {
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
+                CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                 if (s != null) {
                     s.setStatus(CrawlSession.CrawlStatus.COMPLETED);
                     s.setEndTime(LocalDateTime.now());
-                    s.setTotalPages(pageDao.countBySessionId(sessionId).intValue());
-                    s.setTotalDownloaded(downloadedFileDao.countBySessionId(sessionId).intValue());
-                    sessionDao.save(s);
+                    s.setTotalPages(pageRepository.countBySessionId(sessionId).intValue());
+                    s.setTotalDownloaded(downloadedFileRepository.countBySessionId(sessionId).intValue());
+                    sessionRepository.save(s);
 
                     log.info("Crawl completed for session: {}", sessionId);
+
+                    // Note: WebSocket updates removed for JavaFX desktop app
                 }
             }
 
             @Override
             public void onError(Exception e) {
                 log.error("Crawl error for session: {}", sessionId, e);
-                CrawlSession s = sessionDao.findById(sessionId).orElse(null);
+                CrawlSession s = sessionRepository.findById(sessionId).orElse(null);
                 if (s != null) {
                     s.setStatus(CrawlSession.CrawlStatus.FAILED);
                     s.setEndTime(LocalDateTime.now());
-                    sessionDao.save(s);
+                    sessionRepository.save(s);
                 }
+
+                // Note: WebSocket updates removed for JavaFX desktop app
             }
         });
 
         return buildCrawlResponse(session);
     }
 
+    @Transactional
     public CrawlResponse pauseCrawl(Long sessionId) {
-        CrawlSession session = sessionDao.findById(sessionId)
+        CrawlSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.pauseCrawl(sessionId);
         session.setStatus(CrawlSession.CrawlStatus.PAUSED);
-        sessionDao.save(session);
+        sessionRepository.save(session);
 
         return buildCrawlResponse(session);
     }
 
+    @Transactional
     public CrawlResponse resumeCrawl(Long sessionId) {
-        CrawlSession session = sessionDao.findById(sessionId)
+        CrawlSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.resumeCrawl(sessionId);
         session.setStatus(CrawlSession.CrawlStatus.RUNNING);
-        sessionDao.save(session);
+        sessionRepository.save(session);
 
         return buildCrawlResponse(session);
     }
 
+    @Transactional
     public CrawlResponse stopCrawl(Long sessionId) {
-        CrawlSession session = sessionDao.findById(sessionId)
+        CrawlSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         crawlerEngine.stopCrawl(sessionId);
         session.setStatus(CrawlSession.CrawlStatus.STOPPED);
         session.setEndTime(LocalDateTime.now());
-        sessionDao.save(session);
+        sessionRepository.save(session);
 
         return buildCrawlResponse(session);
     }
 
     public CrawlResponse getStatus(Long sessionId) {
-        CrawlSession session = sessionDao.findById(sessionId)
+        CrawlSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
         return buildCrawlResponse(session);
     }
