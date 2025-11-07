@@ -30,26 +30,48 @@ public class JavaScriptPageProcessor {
 
     private void initWebView() {
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Exception> initError = new AtomicReference<>();
+
         Platform.runLater(() -> {
             try {
+                log.info("========================================");
                 log.info("Initializing JavaFX WebView for JavaScript rendering...");
                 log.warn("NOTE: WebView processes pages sequentially. Concurrent threads setting will be ignored for JavaScript rendering.");
+
                 webView = new WebView();
+                log.info("WebView created");
+
                 webEngine = webView.getEngine();
+                log.info("WebEngine obtained");
+
                 webEngine.setJavaScriptEnabled(true);
+                log.info("JavaScript enabled");
+
                 webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JCrawler/1.0 WebView");
-                log.info("JavaFX WebView initialized successfully");
+                log.info("User agent set");
+
+                log.info("✅ JavaFX WebView initialized successfully");
+                log.info("========================================");
             } catch (Exception e) {
-                log.error("Failed to initialize WebView: {}", e.getMessage(), e);
+                log.error("❌ CRITICAL: Failed to initialize WebView!", e);
+                log.error("Exception type: {}", e.getClass().getName());
+                log.error("Exception message: {}", e.getMessage());
+                initError.set(e);
             } finally {
                 latch.countDown();
             }
         });
 
         try {
-            latch.await(10, TimeUnit.SECONDS);
+            boolean initialized = latch.await(10, TimeUnit.SECONDS);
+            if (!initialized) {
+                log.error("CRITICAL: WebView initialization TIMEOUT after 10 seconds!");
+                log.error("JavaFX platform may not be running properly");
+            } else {
+                log.info("WebView initialization completed successfully");
+            }
         } catch (InterruptedException e) {
-            log.error("WebView initialization timeout", e);
+            log.error("WebView initialization interrupted", e);
             Thread.currentThread().interrupt();
         }
     }
@@ -58,10 +80,17 @@ public class JavaScriptPageProcessor {
         long startTime = System.currentTimeMillis();
         PageProcessor.PageResult result = new PageProcessor.PageResult();
 
+        log.info("========================================");
+        log.info("JavaScriptPageProcessor.fetchAndParse called");
+        log.info("URL: {}", url);
+        log.info("WebEngine status: {}", webEngine == null ? "NULL" : "INITIALIZED");
+        log.info("========================================");
+
         if (webEngine == null) {
             result.success = false;
-            result.errorMessage = "WebView not initialized";
+            result.errorMessage = "WebView not initialized - JavaFX may have failed to start";
             result.statusCode = 0;
+            log.error("CRITICAL: WebEngine is NULL! WebView initialization failed!");
             buildPageEntity(result, url, sessionId, parentUrl, depth, startTime);
             return result;
         }
@@ -134,12 +163,14 @@ public class JavaScriptPageProcessor {
 
             if (!loaded) {
                 result.success = false;
-                result.errorMessage = "Page load timeout";
+                result.errorMessage = "Page load timeout after 30 seconds";
                 result.statusCode = 0;
+                log.error("WebView page load TIMEOUT for URL: {}", url);
             } else if (errorRef.get() != null) {
                 result.success = false;
-                result.errorMessage = errorRef.get().getMessage();
+                result.errorMessage = "WebView error: " + errorRef.get().getMessage();
                 result.statusCode = 0;
+                log.error("WebView error for URL: {}", url, errorRef.get());
             } else {
                 String html = htmlRef.get();
                 if (html != null && !html.isEmpty()) {
@@ -152,18 +183,30 @@ public class JavaScriptPageProcessor {
                     int linkCount = result.document.select("a[href]").size();
                     log.info("✅ WebView rendered page successfully!");
                     log.info("   HTML length: {} chars", html.length());
+                    log.info("   Title: {}", titleRef.get());
                     log.info("   Found {} <a> tags with href attribute", linkCount);
+
+                    // Log HTML preview for debugging
+                    if (html.length() < 500) {
+                        log.info("   Full HTML:\n{}", html);
+                    } else {
+                        log.info("   HTML preview (first 500 chars):\n{}", html.substring(0, 500));
+                    }
 
                     // Log first few links for debugging
                     if (linkCount > 0) {
                         var links = result.document.select("a[href]");
                         log.info("   Sample links:");
-                        for (int i = 0; i < Math.min(3, linkCount); i++) {
+                        for (int i = 0; i < Math.min(5, linkCount); i++) {
                             var link = links.get(i);
-                            log.info("     - {}", link.attr("abs:href"));
+                            log.info("     - href=\"{}\" abs=\"{}\"", link.attr("href"), link.attr("abs:href"));
                         }
                     } else {
-                        log.warn("   ⚠️ NO LINKS FOUND! The page might not have rendered properly or has no links.");
+                        log.warn("   ⚠️ NO LINKS FOUND!");
+                        log.warn("   This could mean:");
+                        log.warn("   1. The page has no <a> tags");
+                        log.warn("   2. React/JS hasn't finished rendering yet (increase wait time)");
+                        log.warn("   3. WebView doesn't support the JavaScript on this page");
                     }
                 } else {
                     result.success = false;
