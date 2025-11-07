@@ -7,6 +7,7 @@ import com.jcrawler.dto.CrawlResponse;
 import com.jcrawler.model.InternalLink;
 import com.jcrawler.model.Page;
 import com.jcrawler.service.CrawlerService;
+import com.jcrawler.util.UILogBuffer;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -22,6 +23,7 @@ public class CrawlerTab {
     private final CrawlerService crawlerService;
     private final PageDao pageDao;
     private final InternalLinkDao internalLinkDao;
+    private final UILogBuffer uiLogBuffer = UILogBuffer.getInstance();
 
     public CrawlerTab(CrawlerService crawlerService, PageDao pageDao, InternalLinkDao internalLinkDao) {
         this.crawlerService = crawlerService;
@@ -352,6 +354,16 @@ public class CrawlerTab {
                         }
                     }
                     logArea.appendText("[REFRESH] ========================\n\n");
+
+                    // Show WebView diagnostic logs
+                    String webViewLogs = uiLogBuffer.getAllLogs();
+                    if (!webViewLogs.isEmpty()) {
+                        logArea.appendText("[REFRESH] === WEBVIEW DIAGNOSTIC LOGS ===\n");
+                        logArea.appendText(webViewLogs);
+                        logArea.appendText("[REFRESH] ========================\n\n");
+                    } else {
+                        logArea.appendText("[REFRESH] No WebView diagnostic logs available\n\n");
+                    }
 
                     statusLabel.setText("Status: " + response.getStatus());
                 });

@@ -1,6 +1,7 @@
 package com.jcrawler.engine;
 
 import com.jcrawler.model.Page;
+import com.jcrawler.util.UILogBuffer;
 import javafx.application.Platform;
 import javafx.concurrent.Worker;
 import javafx.scene.web.WebEngine;
@@ -19,6 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class JavaScriptPageProcessor {
 
+    private final UILogBuffer uiLog = UILogBuffer.getInstance();
+
     private WebView webView;
     private WebEngine webEngine;
     private final Object lock = new Object();
@@ -36,26 +39,34 @@ public class JavaScriptPageProcessor {
             try {
                 log.info("========================================");
                 log.info("Initializing JavaFX WebView for JavaScript rendering...");
+                uiLog.log("[WEBVIEW] Initializing JavaFX WebView...");
+
                 log.warn("NOTE: WebView processes pages sequentially. Concurrent threads setting will be ignored for JavaScript rendering.");
 
                 webView = new WebView();
                 log.info("WebView created");
+                uiLog.log("[WEBVIEW] WebView object created");
 
                 webEngine = webView.getEngine();
                 log.info("WebEngine obtained");
+                uiLog.log("[WEBVIEW] WebEngine obtained");
 
                 webEngine.setJavaScriptEnabled(true);
                 log.info("JavaScript enabled");
+                uiLog.log("[WEBVIEW] JavaScript enabled");
 
                 webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JCrawler/1.0 WebView");
                 log.info("User agent set");
 
                 log.info("✅ JavaFX WebView initialized successfully");
                 log.info("========================================");
+                uiLog.log("[WEBVIEW] ✅ WebView initialized successfully!");
             } catch (Exception e) {
                 log.error("❌ CRITICAL: Failed to initialize WebView!", e);
                 log.error("Exception type: {}", e.getClass().getName());
                 log.error("Exception message: {}", e.getMessage());
+                uiLog.log("[WEBVIEW] ❌ CRITICAL ERROR: WebView initialization failed!");
+                uiLog.log("[WEBVIEW] Error: " + e.getClass().getName() + ": " + e.getMessage());
                 initError.set(e);
             } finally {
                 latch.countDown();
@@ -86,11 +97,15 @@ public class JavaScriptPageProcessor {
         log.info("WebEngine status: {}", webEngine == null ? "NULL" : "INITIALIZED");
         log.info("========================================");
 
+        uiLog.log("[WEBVIEW] Fetching URL: " + url);
+        uiLog.log("[WEBVIEW] WebEngine status: " + (webEngine == null ? "NULL" : "INITIALIZED"));
+
         if (webEngine == null) {
             result.success = false;
             result.errorMessage = "WebView not initialized - JavaFX may have failed to start";
             result.statusCode = 0;
             log.error("CRITICAL: WebEngine is NULL! WebView initialization failed!");
+            uiLog.log("[WEBVIEW] ❌ CRITICAL: WebEngine is NULL! Initialization failed!");
             buildPageEntity(result, url, sessionId, parentUrl, depth, startTime);
             return result;
         }
@@ -186,11 +201,19 @@ public class JavaScriptPageProcessor {
                     log.info("   Title: {}", titleRef.get());
                     log.info("   Found {} <a> tags with href attribute", linkCount);
 
+                    uiLog.log("[WEBVIEW] ✅ Page rendered: " + url);
+                    uiLog.log("[WEBVIEW] HTML length: " + html.length() + " chars");
+                    uiLog.log("[WEBVIEW] Title: " + titleRef.get());
+                    uiLog.log("[WEBVIEW] Found " + linkCount + " <a> tags with href");
+
                     // Log HTML preview for debugging
                     if (html.length() < 500) {
                         log.info("   Full HTML:\n{}", html);
+                        uiLog.log("[WEBVIEW] Full HTML: " + html);
                     } else {
-                        log.info("   HTML preview (first 500 chars):\n{}", html.substring(0, 500));
+                        String preview = html.substring(0, 500);
+                        log.info("   HTML preview (first 500 chars):\n{}", preview);
+                        uiLog.log("[WEBVIEW] HTML preview: " + preview + "...");
                     }
 
                     // Log first few links for debugging
@@ -200,6 +223,9 @@ public class JavaScriptPageProcessor {
                         for (int i = 0; i < Math.min(5, linkCount); i++) {
                             var link = links.get(i);
                             log.info("     - href=\"{}\" abs=\"{}\"", link.attr("href"), link.attr("abs:href"));
+                            if (i < 3) { // Only first 3 in UI log
+                                uiLog.log("[WEBVIEW] Link " + (i+1) + ": " + link.attr("abs:href"));
+                            }
                         }
                     } else {
                         log.warn("   ⚠️ NO LINKS FOUND!");
@@ -207,6 +233,9 @@ public class JavaScriptPageProcessor {
                         log.warn("   1. The page has no <a> tags");
                         log.warn("   2. React/JS hasn't finished rendering yet (increase wait time)");
                         log.warn("   3. WebView doesn't support the JavaScript on this page");
+
+                        uiLog.log("[WEBVIEW] ⚠️ NO LINKS FOUND in HTML!");
+                        uiLog.log("[WEBVIEW] Possible reasons: no <a> tags, JS not rendered, or WebView incompatibility");
                     }
                 } else {
                     result.success = false;
