@@ -79,7 +79,7 @@ jpackage --type app-image ^
          --dest target\installer ^
          --app-version 1.0.0 ^
          --module-path %JAVAFX_JMODS_DIR% ^
-         --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.web,javafx.media,java.naming,java.sql,java.management
+         --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.web,javafx.media,java.naming,java.sql,java.management,jdk.crypto.ec,jdk.crypto.cryptoki
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

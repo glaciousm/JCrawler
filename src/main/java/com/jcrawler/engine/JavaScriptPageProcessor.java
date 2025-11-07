@@ -25,7 +25,12 @@ public class JavaScriptPageProcessor {
 
     public JavaScriptPageProcessor() {
         // Initialize WebView on JavaFX thread
-        initWebView();
+        try {
+            initWebView();
+        } catch (Exception e) {
+            log.error("FATAL: Failed to initialize JavaScriptPageProcessor", e);
+            throw new RuntimeException("JavaScriptPageProcessor initialization failed", e);
+        }
     }
 
     private void initWebView() {
@@ -38,6 +43,11 @@ public class JavaScriptPageProcessor {
                 webEngine = webView.getEngine();
                 webEngine.setJavaScriptEnabled(true);
                 webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JCrawler/1.0 WebView");
+
+                // Add console message listener to catch JavaScript errors
+                webEngine.setOnAlert(event -> log.warn("JavaScript alert: {}", event.getData()));
+                webEngine.setOnError(event -> log.error("WebEngine error: {}", event.getMessage()));
+
                 log.info("JavaFX WebView initialized successfully");
             } catch (Exception e) {
                 log.error("Failed to initialize WebView: {}", e.getMessage(), e);
@@ -55,6 +65,7 @@ public class JavaScriptPageProcessor {
     }
 
     public synchronized PageProcessor.PageResult fetchAndParse(String url, Map<String, String> cookies, Long sessionId, String parentUrl, Integer depth) {
+        log.info("=== JavaScriptPageProcessor.fetchAndParse called for URL: {}", url);
         long startTime = System.currentTimeMillis();
         PageProcessor.PageResult result = new PageProcessor.PageResult();
 
@@ -73,49 +84,86 @@ public class JavaScriptPageProcessor {
 
         Platform.runLater(() -> {
             try {
-                // Set up ONE-TIME load listener
-                webEngine.getLoadWorker().stateProperty().addListener(new javafx.beans.value.ChangeListener<Worker.State>() {
-                    @Override
-                    public void changed(javafx.beans.value.ObservableValue<? extends Worker.State> obs, Worker.State oldState, Worker.State newState) {
-                        if (newState == Worker.State.SUCCEEDED) {
-                            // Remove listener to prevent multiple triggers
-                            webEngine.getLoadWorker().stateProperty().removeListener(this);
-
-                            // Wait for React to render (in background thread)
-                            new Thread(() -> {
-                                try {
-                                    // Wait longer for React to fully render
-                                    Thread.sleep(3000);
-
-                                    // Get rendered HTML on FX thread
-                                    Platform.runLater(() -> {
-                                        try {
-                                            String html = (String) webEngine.executeScript("document.documentElement.outerHTML");
-                                            htmlRef.set(html);
-                                            titleRef.set(webEngine.getTitle());
-
-                                            log.debug("WebView rendered page, HTML length: {}", html != null ? html.length() : 0);
-                                        } catch (Exception e) {
-                                            errorRef.set(e);
-                                        } finally {
-                                            loadLatch.countDown();
-                                        }
-                                    });
-                                } catch (Exception e) {
-                                    errorRef.set(e);
-                                    loadLatch.countDown();
-                                }
-                            }).start();
-                        } else if (newState == Worker.State.FAILED) {
-                            webEngine.getLoadWorker().stateProperty().removeListener(this);
-                            errorRef.set(new RuntimeException("Failed to load page"));
-                            loadLatch.countDown();
-                        }
-                    }
-                });
-
                 // Load the URL
                 webEngine.load(url);
+                log.info("WebEngine.load() called for: {}", url);
+
+                // Wait for initial page load, then extract HTML after fixed delay
+                new Thread(() -> {
+                    try {
+                        // Poll for document to have content (max 20 seconds)
+                        int attempts = 0;
+                        int maxAttempts = 40; // 40 * 500ms = 20 seconds
+
+                        while (attempts < maxAttempts) {
+                            Thread.sleep(500);
+                            attempts++;
+
+                            // Check if body has any content on FX thread
+                            AtomicReference<Integer> bodyLengthRef = new AtomicReference<>(0);
+                            CountDownLatch checkLatch = new CountDownLatch(1);
+
+                            Platform.runLater(() -> {
+                                try {
+                                    Object bodyHTML = webEngine.executeScript("document.body ? document.body.innerHTML.length : 0");
+                                    bodyLengthRef.set(((Number) bodyHTML).intValue());
+                                } catch (Exception e) {
+                                    // Ignore
+                                } finally {
+                                    checkLatch.countDown();
+                                }
+                            });
+
+                            checkLatch.await(1, TimeUnit.SECONDS);
+
+                            if (bodyLengthRef.get() > 10) {
+                                log.info("Body content detected after {} ms", attempts * 500);
+                                // Wait additional 2 seconds for React to fully render
+                                Thread.sleep(2000);
+                                break;
+                            }
+                        }
+
+                        // Get rendered HTML on FX thread
+                        Platform.runLater(() -> {
+                            try {
+                                // Check page state
+                                String location = webEngine.getLocation();
+                                String readyState = (String) webEngine.executeScript("document.readyState");
+                                log.info("Page location: {}, readyState: {}", location, readyState);
+
+                                String html = (String) webEngine.executeScript("document.documentElement.outerHTML");
+                                htmlRef.set(html);
+
+                                // Include diagnostic info in title
+                                String actualTitle = webEngine.getTitle();
+                                String diagnosticTitle = actualTitle + " [WebView location: " + location + ", readyState: " + readyState + "]";
+                                titleRef.set(diagnosticTitle);
+
+                                log.info("WebView rendered page, HTML length: {}, Title: {}", html != null ? html.length() : 0, webEngine.getTitle());
+                                if (html != null && html.length() < 5000) {
+                                    log.info("HTML content preview: {}", html.substring(0, Math.min(500, html.length())));
+                                }
+
+                                // Check if there's a React root element
+                                Object rootElement = webEngine.executeScript("document.getElementById('root')");
+                                log.info("React root element present: {}", rootElement != null);
+                                if (rootElement != null) {
+                                    String rootHTML = (String) webEngine.executeScript("document.getElementById('root').innerHTML");
+                                    log.info("Root innerHTML length: {}", rootHTML != null ? rootHTML.length() : 0);
+                                }
+                            } catch (Exception e) {
+                                log.error("Failed to extract HTML", e);
+                                errorRef.set(e);
+                            } finally {
+                                loadLatch.countDown();
+                            }
+                        });
+                    } catch (Exception e) {
+                        errorRef.set(e);
+                        loadLatch.countDown();
+                    }
+                }).start();
 
             } catch (Exception e) {
                 errorRef.set(e);
@@ -128,9 +176,11 @@ public class JavaScriptPageProcessor {
             boolean loaded = loadLatch.await(30, TimeUnit.SECONDS);
 
             if (!loaded) {
+                Worker.State finalState = webEngine.getLoadWorker().getState();
                 result.success = false;
-                result.errorMessage = "Page load timeout";
+                result.errorMessage = "Page load timeout (stuck in state: " + finalState + ")";
                 result.statusCode = 0;
+                log.error("WebEngine timeout in state: {}", finalState);
             } else if (errorRef.get() != null) {
                 result.success = false;
                 result.errorMessage = errorRef.get().getMessage();
@@ -160,6 +210,8 @@ public class JavaScriptPageProcessor {
         }
 
         buildPageEntity(result, url, sessionId, parentUrl, depth, startTime);
+        log.info("=== JavaScriptPageProcessor.fetchAndParse COMPLETE. Success: {}, Error: {}, HTML length: {}",
+                result.success, result.errorMessage, result.document != null ? result.document.html().length() : 0);
         return result;
     }
 

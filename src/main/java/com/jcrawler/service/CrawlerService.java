@@ -46,9 +46,17 @@ public class CrawlerService {
         this.downloadService = downloadService;
     }
 
-    public CrawlResponse startCrawl(CrawlRequest request) {
+    public CrawlResponse startCrawl(CrawlRequest request, java.util.function.Consumer<String> logConsumer) {
         log.info("Starting crawl for URL: {}", request.getStartUrl());
         log.info("JavaScript rendering enabled: {}", request.getEnableJavaScript());
+
+        // Test GUI logging
+        if (logConsumer != null) {
+            logConsumer.accept("=== CRAWL STARTING ===");
+            logConsumer.accept("URL: " + request.getStartUrl());
+            logConsumer.accept("JavaScript: " + request.getEnableJavaScript());
+            logConsumer.accept("Max Depth: " + request.getMaxDepth());
+        }
 
         // Extract domain
         String baseDomain = linkExtractor.extractDomain(request.getStartUrl());
@@ -105,6 +113,9 @@ public class CrawlerService {
             @Override
             public void onPageDiscovered(Page page) {
                 page = pageDao.save(page);
+
+                // Update session total pages in real-time
+                sessionDao.incrementTotalPages(sessionId);
 
                 // Extract data if rules exist
                 List<ExtractionRule> rules = ruleDao.findBySessionIdAndEnabled(sessionId, true);
@@ -211,6 +222,14 @@ public class CrawlerService {
                     sessionDao.markFailed(sessionId);
                 } catch (Exception ex) {
                     log.error("Error marking session as failed: {}", sessionId, ex);
+                }
+            }
+
+            @Override
+            public void onLog(String message) {
+                log.info("[CRAWL-{}] {}", sessionId, message);
+                if (logConsumer != null) {
+                    logConsumer.accept(message);
                 }
             }
         });

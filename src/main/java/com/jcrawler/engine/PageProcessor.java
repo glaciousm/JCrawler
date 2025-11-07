@@ -6,9 +6,16 @@ import okhttp3.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
+import javax.net.ssl.*;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -18,11 +25,50 @@ public class PageProcessor {
     private final OkHttpClient httpClient;
 
     public PageProcessor() {
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .followRedirects(true)
-                .build();
+        try {
+            // Create a trust manager that accepts all certificates (for crawling)
+            TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+                }
+            };
+
+            // Install the all-trusting trust manager
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAllCerts, new SecureRandom());
+
+            this.httpClient = new OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) trustAllCerts[0])
+                    .hostnameVerifier((hostname, session) -> true)
+                    // Prefer IPv4 for localhost
+                    .dns(hostname -> {
+                        if ("localhost".equalsIgnoreCase(hostname)) {
+                            // Return IPv4 loopback only for localhost
+                            try {
+                                return Arrays.asList(InetAddress.getByName("127.0.0.1"));
+                            } catch (UnknownHostException e) {
+                                return Arrays.asList(InetAddress.getAllByName(hostname));
+                            }
+                        }
+                        return Arrays.asList(InetAddress.getAllByName(hostname));
+                    })
+                    .build();
+        } catch (Exception e) {
+            log.error("Failed to initialize HTTP client with custom SSL", e);
+            throw new RuntimeException("Failed to initialize HTTP client", e);
+        }
     }
 
     public PageResult fetchAndParse(String url, Map<String, String> cookies, Long sessionId, String parentUrl, Integer depth) {

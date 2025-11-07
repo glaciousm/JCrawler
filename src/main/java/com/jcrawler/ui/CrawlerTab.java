@@ -132,13 +132,19 @@ public class CrawlerTab {
         Label logLabel = new Label("Crawl Log:");
         logLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
 
+        Button refreshLogButton = new Button("Refresh");
+        refreshLogButton.setOnAction(e -> refreshLog());
+
+        HBox logHeaderBox = new HBox(10, logLabel, refreshLogButton);
+        logHeaderBox.setAlignment(Pos.CENTER_LEFT);
+
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setPrefRowCount(15);
         logArea.setWrapText(true);
         logArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px;");
 
-        VBox logBox = new VBox(5, logLabel, logArea);
+        VBox logBox = new VBox(5, logHeaderBox, logArea);
         VBox.setVgrow(logArea, Priority.ALWAYS);
 
         // Add all to main vbox
@@ -177,7 +183,10 @@ public class CrawlerTab {
         // Start crawl in background thread
         new Thread(() -> {
             try {
-                CrawlResponse response = crawlerService.startCrawl(request);
+                CrawlResponse response = crawlerService.startCrawl(request, message -> {
+                    // Send log messages to GUI
+                    Platform.runLater(() -> logArea.appendText(message + "\n"));
+                });
                 currentSessionId = response.getSessionId();
 
                 Platform.runLater(() -> {
@@ -257,6 +266,34 @@ public class CrawlerTab {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> showAlert("Error", "Failed to stop crawl: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private void refreshLog() {
+        if (currentSessionId == null) {
+            logArea.appendText("No active session to refresh\n");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                CrawlResponse response = crawlerService.getStatus(currentSessionId);
+                Platform.runLater(() -> {
+                    logArea.appendText("----------------------------------------\n");
+                    logArea.appendText("Refreshed at: " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")) + "\n");
+                    logArea.appendText("Session ID: " + response.getSessionId() + "\n");
+                    logArea.appendText("Status: " + response.getStatus() + "\n");
+                    logArea.appendText("Pages Crawled: " + response.getTotalPages() + "\n");
+                    logArea.appendText("Flows Found: " + response.getTotalFlows() + "\n");
+                    logArea.appendText("Downloads: " + response.getTotalDownloaded() + "\n");
+                    logArea.appendText("External URLs: " + response.getTotalExternalUrls() + "\n");
+                    logArea.appendText("----------------------------------------\n");
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    logArea.appendText("ERROR refreshing: " + e.getMessage() + "\n");
+                });
             }
         }).start();
     }

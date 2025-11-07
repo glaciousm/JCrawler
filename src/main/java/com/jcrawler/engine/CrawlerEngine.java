@@ -129,27 +129,26 @@ public class CrawlerEngine {
     private void processSinglePage(CrawlContext context, UrlDepthPair urlPair, CrawlCallback callback) {
         CrawlSession session = context.session;
 
-        // Choose between static HTML or JavaScript rendering
-        PageProcessor.PageResult result;
-        if (session.getEnableJavaScript()) {
-            log.debug("Using JavaScript processor for URL: {}", urlPair.url);
-            result = jsPageProcessor.fetchAndParse(
-                    urlPair.url,
-                    session.getSessionCookies(),
-                    session.getId(),
-                    urlPair.parentUrl,
-                    urlPair.depth
-            );
-        } else {
-            log.debug("Using static HTML processor for URL: {}", urlPair.url);
-            result = pageProcessor.fetchAndParse(
-                    urlPair.url,
-                    session.getSessionCookies(),
-                    session.getId(),
-                    urlPair.parentUrl,
-                    urlPair.depth
-            );
+        // Track flow when we ACTUALLY VISIT this page (not just discover it)
+        if (urlPair.parentUrl != null) {
+            List<String> flowPath = new ArrayList<>();
+            flowPath.add(urlPair.parentUrl);
+            flowPath.add(urlPair.url);
+            callback.onFlowDiscovered(flowPath, urlPair.depth);
         }
+
+        // NOTE: JavaFX WebView cannot run modern React/SPA apps (no ES6+ support)
+        // Using static HTML instead - React Router generates <a> tags we can extract
+        PageProcessor.PageResult result;
+
+        log.info("Processing: {}", urlPair.url);
+        result = pageProcessor.fetchAndParse(
+                urlPair.url,
+                session.getSessionCookies(),
+                session.getId(),
+                urlPair.parentUrl,
+                urlPair.depth
+        );
 
         // Save page
         callback.onPageDiscovered(result.page);
@@ -159,7 +158,7 @@ public class CrawlerEngine {
         if (result.success && result.document != null) {
             // Extract links
             Set<String> links = linkExtractor.extractLinks(result.document, urlPair.url, session.getBaseDomain());
-            log.info("Extracted {} internal links from {}", links.size(), urlPair.url);
+            log.debug("Extracted {} internal links from {}", links.size(), urlPair.url);
 
             int newLinksAdded = 0;
             for (String link : links) {
@@ -172,21 +171,10 @@ public class CrawlerEngine {
                     context.toVisit.add(new UrlDepthPair(link, urlPair.depth + 1, urlPair.url));
                     newLinksAdded++;
                     log.debug("Added new link to queue: {} (depth: {})", link, urlPair.depth + 1);
-
-                    // Track flow
-                    List<String> flowPath = new ArrayList<>();
-                    if (urlPair.parentUrl != null) {
-                        flowPath.add(urlPair.parentUrl);
-                    }
-                    flowPath.add(urlPair.url);
-                    flowPath.add(link);
-
-                    callback.onFlowDiscovered(flowPath, urlPair.depth + 1);
                 }
             }
 
-            log.info("Added {} new links to crawl queue. Queue size: {}", newLinksAdded, context.toVisit.size());
-        }
+            log.debug("Added {} new links to crawl queue. Queue size: {}", newLinksAdded, context.toVisit.size());
 
             // Extract attachment URLs
             Set<String> attachments = linkExtractor.extractAttachmentUrls(
@@ -297,5 +285,6 @@ public class CrawlerEngine {
         void onInternalLinkFound(String url, String foundOnPage);
         void onComplete();
         void onError(Exception e);
+        void onLog(String message);
     }
 }

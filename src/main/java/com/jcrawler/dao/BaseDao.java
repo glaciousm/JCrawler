@@ -25,6 +25,8 @@ public abstract class BaseDao<T, ID> {
     public T save(T entity) {
         return executeInTransaction(session -> {
             session.persist(entity);
+            session.flush();  // Force immediate write to database
+            session.clear();  // Clear first-level cache to prevent memory buildup
             return entity;
         });
     }

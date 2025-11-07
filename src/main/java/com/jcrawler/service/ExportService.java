@@ -52,7 +52,37 @@ public class ExportService {
     // Export methods for UI
     public void exportToJson(Long sessionId, String filePath) throws Exception {
         ExportData data = collectAllData(sessionId);
-        objectMapper.writeValue(new File(filePath), data);
+
+        List<Map<String, String>> flatData = new ArrayList<>();
+        int pageId = 1;
+
+        if (data.pages != null) {
+            for (Page page : data.pages) {
+                List<String> externalUrls = data.externalUrls.stream()
+                    .filter(eu -> eu.getFoundOnPage().equals(page.getUrl()))
+                    .map(ExternalUrl::getUrl)
+                    .toList();
+
+                List<String> downloads = data.downloadedFiles.stream()
+                    .filter(df -> df.getPageId().equals(page.getId()))
+                    .map(DownloadedFile::getUrl)
+                    .toList();
+
+                int rowsNeeded = Math.max(1, Math.max(externalUrls.size(), downloads.size()));
+
+                for (int i = 0; i < rowsNeeded; i++) {
+                    Map<String, String> row = new LinkedHashMap<>();
+                    row.put("id", String.valueOf(pageId));
+                    row.put("pageUrl", page.getUrl() != null ? page.getUrl() : "");
+                    row.put("externalUrl", i < externalUrls.size() ? externalUrls.get(i) : "");
+                    row.put("downloadFile", i < downloads.size() ? downloads.get(i) : "");
+                    flatData.add(row);
+                }
+                pageId++;
+            }
+        }
+
+        objectMapper.writeValue(new File(filePath), flatData);
         log.info("Exported session {} to JSON: {}", sessionId, filePath);
     }
 
@@ -65,16 +95,37 @@ public class ExportService {
 
         try (CSVWriter writer = new CSVWriter(new FileWriter(filePath))) {
             // Header
-            writer.writeNext(new String[]{"Page URL", "Title", "Status Code", "Depth"});
+            writer.writeNext(new String[]{"ID", "Page URL", "External URL", "Download File"});
 
             if (data.pages != null) {
+                int pageId = 1;
                 for (Page page : data.pages) {
-                    writer.writeNext(new String[]{
-                        page.getUrl() != null ? page.getUrl() : "",
-                        page.getTitle() != null ? page.getTitle() : "",
-                        String.valueOf(page.getStatusCode()),
-                        String.valueOf(page.getDepthLevel())
-                    });
+                    // Get external URLs and downloads for this page
+                    List<String> externalUrls = data.externalUrls.stream()
+                        .filter(eu -> eu.getFoundOnPage().equals(page.getUrl()))
+                        .map(ExternalUrl::getUrl)
+                        .toList();
+
+                    List<String> downloads = data.downloadedFiles.stream()
+                        .filter(df -> df.getPageId().equals(page.getId()))
+                        .map(DownloadedFile::getUrl)
+                        .toList();
+
+                    // Calculate how many rows needed (at least 1)
+                    int rowsNeeded = Math.max(1, Math.max(externalUrls.size(), downloads.size()));
+
+                    for (int i = 0; i < rowsNeeded; i++) {
+                        String externalUrl = i < externalUrls.size() ? externalUrls.get(i) : "";
+                        String downloadFile = i < downloads.size() ? downloads.get(i) : "";
+
+                        writer.writeNext(new String[]{
+                            String.valueOf(pageId),
+                            page.getUrl() != null ? page.getUrl() : "",
+                            externalUrl,
+                            downloadFile
+                        });
+                    }
+                    pageId++;
                 }
             }
         }
@@ -85,26 +136,58 @@ public class ExportService {
         ExportData data = collectAllData(sessionId);
 
         try (Workbook workbook = new XSSFWorkbook()) {
-            // Session info sheet
-            Sheet sessionSheet = workbook.createSheet("Session Info");
-            createSessionInfoSheet(sessionSheet, data.session);
+            Sheet sheet = workbook.createSheet("Crawl Data");
 
-            // Pages sheet
-            if (data.pages != null && !data.pages.isEmpty()) {
-                Sheet pagesSheet = workbook.createSheet("Pages");
-                createPagesSheet(pagesSheet, data.pages);
-            }
+            // Header
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("ID");
+            headerRow.createCell(1).setCellValue("Page URL");
+            headerRow.createCell(2).setCellValue("External URL");
+            headerRow.createCell(3).setCellValue("Download File");
 
-            // Flows sheet
-            if (data.flows != null && !data.flows.isEmpty()) {
-                Sheet flowsSheet = workbook.createSheet("Navigation Flows");
-                createFlowsSheet(flowsSheet, data.flows);
-            }
+            int currentRow = 1;
+            int pageId = 1;
 
-            // Downloads sheet
-            if (data.downloadedFiles != null && !data.downloadedFiles.isEmpty()) {
-                Sheet downloadsSheet = workbook.createSheet("Downloads");
-                createDownloadedFilesSheet(downloadsSheet, data.downloadedFiles);
+            if (data.pages != null) {
+                for (Page page : data.pages) {
+                    // Get external URLs and downloads for this page
+                    List<String> externalUrls = data.externalUrls.stream()
+                        .filter(eu -> eu.getFoundOnPage().equals(page.getUrl()))
+                        .map(ExternalUrl::getUrl)
+                        .toList();
+
+                    List<String> downloads = data.downloadedFiles.stream()
+                        .filter(df -> df.getPageId().equals(page.getId()))
+                        .map(DownloadedFile::getUrl)
+                        .toList();
+
+                    // Calculate how many rows needed (at least 1)
+                    int rowsNeeded = Math.max(1, Math.max(externalUrls.size(), downloads.size()));
+
+                    // Create rows
+                    for (int i = 0; i < rowsNeeded; i++) {
+                        Row row = sheet.createRow(currentRow + i);
+                        row.createCell(0).setCellValue(pageId);
+                        row.createCell(1).setCellValue(page.getUrl() != null ? page.getUrl() : "");
+
+                        String externalUrl = i < externalUrls.size() ? externalUrls.get(i) : "";
+                        String downloadFile = i < downloads.size() ? downloads.get(i) : "";
+
+                        row.createCell(2).setCellValue(externalUrl);
+                        row.createCell(3).setCellValue(downloadFile);
+                    }
+
+                    // Merge cells in columns 0 and 1 if more than 1 row
+                    if (rowsNeeded > 1) {
+                        sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                            currentRow, currentRow + rowsNeeded - 1, 0, 0)); // Column 0 (ID)
+                        sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                            currentRow, currentRow + rowsNeeded - 1, 1, 1)); // Column 1 (Page URL)
+                    }
+
+                    currentRow += rowsNeeded;
+                    pageId++;
+                }
             }
 
             Path parentDir = Paths.get(filePath).getParent();
@@ -127,24 +210,74 @@ public class ExportService {
             document.addPage(page);
 
             PDPageContentStream contentStream = new PDPageContentStream(document, page);
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            PDType1Font fontBold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 
+            float yPosition = 750;
+            float margin = 50;
+            float fontSize = 10;
+            float lineHeight = 12;
+
+            // Title
             contentStream.beginText();
-            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
-            contentStream.newLineAtOffset(50, 750);
+            contentStream.setFont(fontBold, 14);
+            contentStream.newLineAtOffset(margin, yPosition);
             contentStream.showText("Crawl Session Export - ID: " + sessionId);
             contentStream.endText();
+            yPosition -= 30;
 
+            // Header
             contentStream.beginText();
-            contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
-            contentStream.newLineAtOffset(50, 720);
-            contentStream.showText("Start URL: " + data.session.getStartUrl());
-            contentStream.newLineAtOffset(0, -15);
-            contentStream.showText("Status: " + data.session.getStatus());
-            contentStream.newLineAtOffset(0, -15);
-            contentStream.showText("Total Pages: " + data.session.getTotalPages());
-            contentStream.newLineAtOffset(0, -15);
-            contentStream.showText("Total Flows: " + data.session.getTotalFlows());
+            contentStream.setFont(fontBold, fontSize);
+            contentStream.newLineAtOffset(margin, yPosition);
+            contentStream.showText("ID | Page URL | External URL | Download File");
             contentStream.endText();
+            yPosition -= 20;
+
+            // Data rows
+            contentStream.setFont(font, fontSize);
+            int pageId = 1;
+
+            if (data.pages != null) {
+                for (Page pg : data.pages) {
+                    List<String> externalUrls = data.externalUrls.stream()
+                        .filter(eu -> eu.getFoundOnPage().equals(pg.getUrl()))
+                        .map(ExternalUrl::getUrl)
+                        .toList();
+
+                    List<String> downloads = data.downloadedFiles.stream()
+                        .filter(df -> df.getPageId().equals(pg.getId()))
+                        .map(DownloadedFile::getUrl)
+                        .toList();
+
+                    int rowsNeeded = Math.max(1, Math.max(externalUrls.size(), downloads.size()));
+
+                    for (int i = 0; i < rowsNeeded; i++) {
+                        String externalUrl = i < externalUrls.size() ? externalUrls.get(i) : "";
+                        String downloadFile = i < downloads.size() ? downloads.get(i) : "";
+
+                        String line = pageId + " | " +
+                                     (pg.getUrl() != null ? pg.getUrl().substring(0, Math.min(30, pg.getUrl().length())) : "") + " | " +
+                                     (externalUrl.length() > 30 ? externalUrl.substring(0, 30) : externalUrl) + " | " +
+                                     (downloadFile.length() > 30 ? downloadFile.substring(0, 30) : downloadFile);
+
+                        contentStream.beginText();
+                        contentStream.newLineAtOffset(margin, yPosition);
+                        contentStream.showText(line);
+                        contentStream.endText();
+
+                        yPosition -= lineHeight;
+                        if (yPosition < 50) {
+                            contentStream.close();
+                            page = new PDPage();
+                            document.addPage(page);
+                            contentStream = new PDPageContentStream(document, page);
+                            yPosition = 750;
+                        }
+                    }
+                    pageId++;
+                }
+            }
 
             contentStream.close();
 
@@ -168,77 +301,6 @@ public class ExportService {
         data.downloadedFiles = downloadedFileDao.findBySessionId(sessionId);
         data.externalUrls = externalUrlDao.findBySessionId(sessionId);
         return data;
-    }
-
-    private void createSessionInfoSheet(Sheet sheet, CrawlSession session) {
-        int rowNum = 0;
-        createRow(sheet, rowNum++, "Session ID", String.valueOf(session.getId()));
-        createRow(sheet, rowNum++, "Start URL", session.getStartUrl());
-        createRow(sheet, rowNum++, "Base Domain", session.getBaseDomain());
-        createRow(sheet, rowNum++, "Status", session.getStatus().name());
-        createRow(sheet, rowNum++, "Start Time", session.getStartTime().toString());
-        if (session.getEndTime() != null) {
-            createRow(sheet, rowNum++, "End Time", session.getEndTime().toString());
-        }
-        createRow(sheet, rowNum++, "Total Pages", String.valueOf(session.getTotalPages()));
-        createRow(sheet, rowNum++, "Total Flows", String.valueOf(session.getTotalFlows()));
-    }
-
-    private void createPagesSheet(Sheet sheet, List<Page> pages) {
-        Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("ID");
-        headerRow.createCell(1).setCellValue("URL");
-        headerRow.createCell(2).setCellValue("Title");
-        headerRow.createCell(3).setCellValue("Status Code");
-        headerRow.createCell(4).setCellValue("Depth");
-
-        int rowNum = 1;
-        for (Page page : pages) {
-            Row row = sheet.createRow(rowNum++);
-            row.createCell(0).setCellValue(page.getId());
-            row.createCell(1).setCellValue(page.getUrl() != null ? page.getUrl() : "");
-            row.createCell(2).setCellValue(page.getTitle() != null ? page.getTitle() : "");
-            row.createCell(3).setCellValue(page.getStatusCode());
-            row.createCell(4).setCellValue(page.getDepthLevel());
-        }
-    }
-
-    private void createFlowsSheet(Sheet sheet, List<NavigationFlow> flows) {
-        Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("ID");
-        headerRow.createCell(1).setCellValue("Depth");
-        headerRow.createCell(2).setCellValue("Flow Path");
-
-        int rowNum = 1;
-        for (NavigationFlow flow : flows) {
-            Row row = sheet.createRow(rowNum++);
-            row.createCell(0).setCellValue(flow.getId());
-            row.createCell(1).setCellValue(flow.getDepth());
-            row.createCell(2).setCellValue(String.join(" → ", flow.getFlowPath()));
-        }
-    }
-
-    private void createDownloadedFilesSheet(Sheet sheet, List<DownloadedFile> files) {
-        Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("ID");
-        headerRow.createCell(1).setCellValue("File Name");
-        headerRow.createCell(2).setCellValue("URL");
-        headerRow.createCell(3).setCellValue("File Size");
-
-        int rowNum = 1;
-        for (DownloadedFile file : files) {
-            Row row = sheet.createRow(rowNum++);
-            row.createCell(0).setCellValue(file.getId());
-            row.createCell(1).setCellValue(file.getFileName() != null ? file.getFileName() : "");
-            row.createCell(2).setCellValue(file.getUrl() != null ? file.getUrl() : "");
-            row.createCell(3).setCellValue(file.getFileSize() != null ? file.getFileSize() : 0L);
-        }
-    }
-
-    private void createRow(Sheet sheet, int rowNum, String label, String value) {
-        Row row = sheet.createRow(rowNum);
-        row.createCell(0).setCellValue(label);
-        row.createCell(1).setCellValue(value);
     }
 
     // Data transfer object

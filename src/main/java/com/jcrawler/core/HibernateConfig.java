@@ -22,7 +22,9 @@ public class HibernateConfig {
                 // Database connection settings
                 Properties properties = new Properties();
                 properties.setProperty("hibernate.connection.driver_class", "org.h2.Driver");
-                properties.setProperty("hibernate.connection.url", "jdbc:h2:file:./data/jcrawler;AUTO_SERVER=TRUE");
+                // Enable LOCK_TIMEOUT for better concurrency handling (semicolons separate params)
+                properties.setProperty("hibernate.connection.url",
+                    "jdbc:h2:file:./data/jcrawler;LOCK_TIMEOUT=10000");
                 properties.setProperty("hibernate.connection.username", "sa");
                 properties.setProperty("hibernate.connection.password", "");
 

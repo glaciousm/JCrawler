@@ -29,6 +29,14 @@ public class CrawlSessionDao extends BaseDao<CrawlSession, Long> {
         });
     }
 
+    public void incrementTotalPages(Long sessionId) {
+        executeInTransaction(session -> {
+            session.createQuery("UPDATE CrawlSession SET totalPages = totalPages + 1 WHERE id = :id")
+                .setParameter("id", sessionId)
+                .executeUpdate();
+        });
+    }
+
     public void incrementTotalFlows(Long sessionId) {
         executeInTransaction(session -> {
             session.createQuery("UPDATE CrawlSession SET totalFlows = totalFlows + 1 WHERE id = :id")
