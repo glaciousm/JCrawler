@@ -187,18 +187,23 @@ public class CrawlerTab {
             System.out.println("[CrawlerTab] Callback received message: " + message);
             Platform.runLater(() -> {
                 System.out.println("[CrawlerTab] Appending to logArea: " + message);
-                logArea.appendText(message + "\n");
+                logArea.appendText("[CALLBACK] " + message + "\n");
             });
         });
         System.out.println("[CrawlerTab] UI callback set!");
 
+        // IMMEDIATE TEST - This should show up RIGHT AWAY
+        logArea.appendText("TEST: About to start background thread\n");
+
         // Start crawl in background thread
         new Thread(() -> {
             try {
+                logArea.appendText("TEST: Inside background thread, calling startCrawl\n");
                 CrawlResponse response = crawlerService.startCrawl(request);
                 currentSessionId = response.getSessionId();
 
                 Platform.runLater(() -> {
+                    logArea.appendText("TEST: startCrawl returned, session ID: " + currentSessionId + "\n");
                     statusLabel.setText("Status: Running (Session ID: " + currentSessionId + ")");
                     // Messages now come from the callback, not here
                     startButton.setDisable(true);
