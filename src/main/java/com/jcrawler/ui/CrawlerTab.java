@@ -1,7 +1,11 @@
 package com.jcrawler.ui;
 
+import com.jcrawler.dao.InternalLinkDao;
+import com.jcrawler.dao.PageDao;
 import com.jcrawler.dto.CrawlRequest;
 import com.jcrawler.dto.CrawlResponse;
+import com.jcrawler.model.InternalLink;
+import com.jcrawler.model.Page;
 import com.jcrawler.service.CrawlerService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -11,12 +15,18 @@ import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.util.List;
+
 public class CrawlerTab {
 
     private final CrawlerService crawlerService;
+    private final PageDao pageDao;
+    private final InternalLinkDao internalLinkDao;
 
-    public CrawlerTab(CrawlerService crawlerService) {
+    public CrawlerTab(CrawlerService crawlerService, PageDao pageDao, InternalLinkDao internalLinkDao) {
         this.crawlerService = crawlerService;
+        this.pageDao = pageDao;
+        this.internalLinkDao = internalLinkDao;
     }
 
     private TextField urlField;
@@ -29,6 +39,7 @@ public class CrawlerTab {
     private Button startButton;
     private Button pauseButton;
     private Button stopButton;
+    private Button refreshButton;
     private TextArea logArea;
     private Label statusLabel;
     private ProgressBar progressBar;
@@ -116,7 +127,12 @@ public class CrawlerTab {
         stopButton.setDisable(true);
         stopButton.setOnAction(e -> stopCrawl());
 
-        HBox buttonBox = new HBox(10, startButton, pauseButton, stopButton);
+        refreshButton = new Button("Refresh Status");
+        refreshButton.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white;");
+        refreshButton.setPrefWidth(120);
+        refreshButton.setOnAction(e -> refreshStatus());
+
+        HBox buttonBox = new HBox(10, startButton, pauseButton, stopButton, refreshButton);
         buttonBox.setAlignment(Pos.CENTER_LEFT);
 
         // Status Section
@@ -275,6 +291,75 @@ public class CrawlerTab {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> showAlert("Error", "Failed to stop crawl: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private void refreshStatus() {
+        if (currentSessionId == null) {
+            logArea.appendText("\n[REFRESH] No active session to refresh\n");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                Platform.runLater(() -> logArea.appendText("\n[REFRESH] Fetching session data from database...\n"));
+
+                CrawlResponse response = crawlerService.getStatus(currentSessionId);
+                List<Page> pages = pageDao.findBySessionId(currentSessionId);
+                List<InternalLink> internalLinks = internalLinkDao.findBySessionId(currentSessionId);
+
+                Platform.runLater(() -> {
+                    logArea.appendText("[REFRESH] === SESSION STATUS ===\n");
+                    logArea.appendText("[REFRESH] Session ID: " + response.getSessionId() + "\n");
+                    logArea.appendText("[REFRESH] Status: " + response.getStatus() + "\n");
+                    logArea.appendText("[REFRESH] Total Pages: " + response.getTotalPages() + "\n");
+                    logArea.appendText("[REFRESH] Total Flows: " + response.getTotalFlows() + "\n");
+                    logArea.appendText("[REFRESH] Total Downloaded: " + response.getTotalDownloaded() + "\n");
+                    logArea.appendText("[REFRESH] Total External URLs: " + response.getTotalExternalUrls() + "\n");
+                    logArea.appendText("[REFRESH] Start Time: " + response.getStartTime() + "\n");
+                    if (response.getEndTime() != null) {
+                        logArea.appendText("[REFRESH] End Time: " + response.getEndTime() + "\n");
+                    }
+                    logArea.appendText("[REFRESH] ========================\n\n");
+
+                    // Show actual pages found
+                    logArea.appendText("[REFRESH] === PAGES IN DATABASE ===\n");
+                    if (pages.isEmpty()) {
+                        logArea.appendText("[REFRESH] No pages found in database!\n");
+                    } else {
+                        for (Page page : pages) {
+                            logArea.appendText("[REFRESH] Page: " + page.getUrl() +
+                                " (depth: " + page.getDepthLevel() +
+                                ", status: " + page.getStatusCode() + ")\n");
+                        }
+                    }
+                    logArea.appendText("[REFRESH] ========================\n\n");
+
+                    // Show internal links found
+                    logArea.appendText("[REFRESH] === INTERNAL LINKS IN DATABASE ===\n");
+                    if (internalLinks.isEmpty()) {
+                        logArea.appendText("[REFRESH] No internal links found! This means:\n");
+                        logArea.appendText("[REFRESH]   - WebView might not be rendering the page\n");
+                        logArea.appendText("[REFRESH]   - Page has no links\n");
+                        logArea.appendText("[REFRESH]   - Link extraction failed\n");
+                    } else {
+                        int toShow = Math.min(10, internalLinks.size());
+                        logArea.appendText("[REFRESH] Showing first " + toShow + " of " + internalLinks.size() + " links:\n");
+                        for (int i = 0; i < toShow; i++) {
+                            InternalLink link = internalLinks.get(i);
+                            logArea.appendText("[REFRESH]   " + link.getUrl() + "\n");
+                        }
+                    }
+                    logArea.appendText("[REFRESH] ========================\n\n");
+
+                    statusLabel.setText("Status: " + response.getStatus());
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    logArea.appendText("[REFRESH] ERROR: " + e.getMessage() + "\n");
+                    e.printStackTrace();
+                });
             }
         }).start();
     }

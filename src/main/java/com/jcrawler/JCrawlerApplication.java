@@ -26,6 +26,8 @@ public class JCrawlerApplication extends Application {
             appContext.getCrawlerService(),
             appContext.getCrawlSessionDao(),
             appContext.getDownloadedFileDao(),
+            appContext.getPageDao(),
+            appContext.getInternalLinkDao(),
             appContext.getExportService()
         );
         mainStage.start(primaryStage);

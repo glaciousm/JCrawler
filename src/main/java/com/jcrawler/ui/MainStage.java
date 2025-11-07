@@ -2,6 +2,8 @@ package com.jcrawler.ui;
 
 import com.jcrawler.dao.CrawlSessionDao;
 import com.jcrawler.dao.DownloadedFileDao;
+import com.jcrawler.dao.InternalLinkDao;
+import com.jcrawler.dao.PageDao;
 import com.jcrawler.service.CrawlerService;
 import com.jcrawler.service.ExportService;
 import javafx.geometry.Insets;
@@ -16,13 +18,18 @@ public class MainStage {
     private final CrawlerService crawlerService;
     private final CrawlSessionDao sessionDao;
     private final DownloadedFileDao downloadedFileDao;
+    private final PageDao pageDao;
+    private final InternalLinkDao internalLinkDao;
     private final ExportService exportService;
 
     public MainStage(CrawlerService crawlerService, CrawlSessionDao sessionDao,
-                    DownloadedFileDao downloadedFileDao, ExportService exportService) {
+                    DownloadedFileDao downloadedFileDao, PageDao pageDao,
+                    InternalLinkDao internalLinkDao, ExportService exportService) {
         this.crawlerService = crawlerService;
         this.sessionDao = sessionDao;
         this.downloadedFileDao = downloadedFileDao;
+        this.pageDao = pageDao;
+        this.internalLinkDao = internalLinkDao;
         this.exportService = exportService;
     }
 
@@ -38,7 +45,7 @@ public class MainStage {
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
         // Create tabs with dependencies
-        CrawlerTab crawlerTab = new CrawlerTab(crawlerService);
+        CrawlerTab crawlerTab = new CrawlerTab(crawlerService, pageDao, internalLinkDao);
         SessionsTab sessionsTab = new SessionsTab(sessionDao, exportService);
         DownloadsTab downloadsTab = new DownloadsTab(downloadedFileDao);
 
