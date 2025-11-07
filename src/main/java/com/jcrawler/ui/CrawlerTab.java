@@ -20,6 +20,7 @@ public class CrawlerTab {
     }
 
     private TextField urlField;
+    private TextArea cookiesField;
     private Spinner<Integer> maxDepthSpinner;
     private Spinner<Integer> maxPagesSpinner;
     private Spinner<Double> requestDelaySpinner;
@@ -51,6 +52,18 @@ public class CrawlerTab {
 
         HBox urlBox = new HBox(10, urlLabel, urlField);
         urlBox.setAlignment(Pos.CENTER_LEFT);
+
+        // Cookies Input
+        Label cookiesLabel = new Label("Session Cookies (optional):");
+        cookiesLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        cookiesField = new TextArea();
+        cookiesField.setPromptText("Supports both formats:\n  Standard: name1=value1; name2=value2\n  JSON-like: sessionId:\"abc-123-xyz\"");
+        cookiesField.setPrefRowCount(3);
+        cookiesField.setPrefWidth(600);
+        cookiesField.setWrapText(true);
+        cookiesField.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 10px;");
+
+        VBox cookiesBox = new VBox(5, cookiesLabel, cookiesField);
 
         // Configuration Grid
         GridPane configGrid = new GridPane();
@@ -152,6 +165,7 @@ public class CrawlerTab {
                 title,
                 new Separator(),
                 urlBox,
+                cookiesBox,
                 configGrid,
                 checkBoxBox,
                 buttonBox,
@@ -170,6 +184,39 @@ public class CrawlerTab {
             return;
         }
 
+        // Parse cookies if provided
+        java.util.Map<String, String> cookies = null;
+        String cookiesText = cookiesField.getText().trim();
+        if (!cookiesText.isEmpty()) {
+            cookies = new java.util.HashMap<>();
+            String[] cookiePairs = cookiesText.split(";");
+            for (String pair : cookiePairs) {
+                pair = pair.trim();
+
+                // Handle both formats:
+                // Standard: name=value
+                // JSON-like: name:"value"
+                String[] keyValue;
+                if (pair.contains(":\"")) {
+                    // JSON-like format: sessionId:"value"
+                    keyValue = pair.split(":", 2);
+                    if (keyValue.length == 2) {
+                        String key = keyValue[0].trim();
+                        String value = keyValue[1].trim();
+                        // Remove quotes
+                        value = value.replaceAll("^\"|\"$", "");
+                        cookies.put(key, value);
+                    }
+                } else {
+                    // Standard format: name=value
+                    keyValue = pair.split("=", 2);
+                    if (keyValue.length == 2) {
+                        cookies.put(keyValue[0].trim(), keyValue[1].trim());
+                    }
+                }
+            }
+        }
+
         CrawlRequest request = CrawlRequest.builder()
                 .startUrl(url)
                 .maxDepth(maxDepthSpinner.getValue())
@@ -178,6 +225,7 @@ public class CrawlerTab {
                 .concurrentThreads(concurrentThreadsSpinner.getValue())
                 .enableJavaScript(enableJsCheckBox.isSelected())
                 .downloadFiles(downloadFilesCheckBox.isSelected())
+                .cookies(cookies)
                 .build();
 
         // Start crawl in background thread
